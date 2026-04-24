@@ -172,6 +172,7 @@ struct ProcessingStats {
     gpu_processing_ms: f64,
     total_processing_ms: f64,
     region: String,
+    compute_backend: String,
 }
 
 // --- GeoJSON conversion ---
@@ -267,6 +268,7 @@ fn to_geojson(result: &DetectionResult) -> GeoJsonResponse {
             gpu_processing_ms: result.stats.gpu_processing_ms,
             total_processing_ms: result.stats.total_processing_ms,
             region: result.stats.region.clone(),
+            compute_backend: result.stats.compute_backend.clone(),
         },
     }
 }

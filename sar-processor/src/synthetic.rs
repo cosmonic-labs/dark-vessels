@@ -37,36 +37,6 @@ impl Rng {
         lo + (self.next_u64() % (hi - lo + 1) as u64) as u32
     }
 
-    /// Box-Muller transform for Gaussian noise
-    fn gaussian(&mut self, mean: f32, std_dev: f32) -> f32 {
-        let u1 = self.next_f32().max(1e-10);
-        let u2 = self.next_f32();
-        let z = (-2.0 * ln_approx(u1)).sqrt() * cos_approx(2.0 * core::f32::consts::PI * u2);
-        mean + std_dev * z
-    }
-}
-
-/// Fast ln approximation
-fn ln_approx(x: f32) -> f32 {
-    let bits = x.to_bits() as f32;
-    let log2 = bits * 1.1920928955078125e-7 - 126.94269504;
-    log2 * 0.6931471805599453
-}
-
-/// Fast cosine approximation (Bhaskara I)
-fn cos_approx(mut x: f32) -> f32 {
-    let pi = core::f32::consts::PI;
-    let two_pi = 2.0 * pi;
-    x = x % two_pi;
-    if x < 0.0 {
-        x += two_pi;
-    }
-    if x > pi {
-        x = two_pi - x;
-    }
-    let x2 = x * x;
-    let pi2 = pi * pi;
-    (pi2 - 4.0 * x2) / (pi2 + x2)
 }
 
 const VESSEL_NAMES: &[&str] = &[
@@ -107,10 +77,11 @@ pub fn generate_sar_image(
     let size = (width * height) as usize;
     let mut image = Vec::with_capacity(size);
 
-    // Generate sea clutter background (Gaussian noise in dB scale)
+    // Generate sea clutter background in linear power
+    // Mean clutter ~ 0.1 (about -10 dB), with some variation
     for _ in 0..size {
-        let clutter_db = rng.gaussian(-10.0, 2.5);
-        image.push(from_db(clutter_db));
+        let base = 0.1 + rng.next_f32() * 0.08; // 0.1 to 0.18 linear
+        image.push(base);
     }
 
     // Place ship targets as bright Gaussian blobs
@@ -118,9 +89,9 @@ pub fn generate_sar_image(
     for _ in 0..num_targets {
         let cx = rng.range_u32(20, width - 20);
         let cy = rng.range_u32(20, height - 20);
-        let ship_db = rng.range_f32(0.0, 8.0); // Ships are bright
-        let ship_intensity = from_db(ship_db);
-        let blob_radius = rng.range_u32(2, 5);
+        // Ship intensity: 3 to 10x above clutter mean (~0.14)
+        let ship_intensity = rng.range_f32(1.5, 8.0);
+        let blob_radius = rng.range_u32(2, 4);
         let rcs = rng.range_f32(10.0, 500.0); // Radar cross section m^2
 
         // Draw Gaussian blob
@@ -132,7 +103,7 @@ pub fn generate_sar_image(
                 if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
                     let dist_sq = (dx * dx + dy * dy) as f32;
                     let sigma = blob_radius as f32 * 0.6;
-                    let weight = (-dist_sq / (2.0 * sigma * sigma)).exp_approx();
+                    let weight = f32::exp(-dist_sq / (2.0 * sigma * sigma));
                     let idx = py as usize * width as usize + px as usize;
                     image[idx] += ship_intensity * weight;
                 }
@@ -148,7 +119,7 @@ pub fn generate_sar_image(
             pixel_y: cy,
             lat,
             lon,
-            intensity_db: ship_db,
+            intensity_db: 10.0 * (ship_intensity.log10()),
             rcs,
         });
     }
@@ -219,28 +190,4 @@ pub fn generate_ais_records(
     records
 }
 
-/// Convert dB to linear power
-fn from_db(db: f32) -> f32 {
-    (db * 0.23025851).exp_approx() // 10^(db/10) = e^(db * ln(10)/10)
-}
-
-trait ExpApprox {
-    fn exp_approx(self) -> Self;
-}
-
-impl ExpApprox for f32 {
-    fn exp_approx(self) -> f32 {
-        // Pade approximation, good for small |x|
-        if self > 10.0 {
-            return 22026.0;
-        }
-        if self < -10.0 {
-            return 0.0;
-        }
-        let x = self;
-        let x2 = x * x;
-        let x3 = x2 * x;
-        (120.0 + 60.0 * x + 12.0 * x2 + x3) / (120.0 - 60.0 * x + 12.0 * x2 - x3)
-    }
-}
 

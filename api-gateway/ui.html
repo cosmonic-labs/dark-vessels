@@ -159,7 +159,8 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
   <div class="stat-row"><span class="stat-label">Matched</span><span class="stat-value green" id="matched-count">--</span></div>
   <div class="stat-row"><span class="stat-label">Dark Vessels</span><span class="stat-value red" id="dark-count-2">--</span></div>
   <div class="stat-row"><span class="stat-label">AIS Anomalies</span><span class="stat-value amber" id="ais-only-count">--</span></div>
-  <div class="stat-row"><span class="stat-label">GPU Processing</span><span class="stat-value cyan" id="gpu-ms">--</span></div>
+  <div class="stat-row"><span class="stat-label">Compute Backend</span><span class="stat-value cyan" id="backend">--</span></div>
+  <div class="stat-row"><span class="stat-label">CFAR Processing</span><span class="stat-value cyan" id="gpu-ms">--</span></div>
   <div class="stat-row"><span class="stat-label">Total Pipeline</span><span class="stat-value" id="total-ms">--</span></div>
 
   <div class="pipeline">
@@ -469,6 +470,7 @@ function updateStats(s) {
   animateValue('matched-count', s.matched);
   animateValue('dark-count-2', s.dark_vessels);
   animateValue('ais-only-count', s.ais_only);
+  setText('backend', s.compute_backend || 'Unknown');
   setText('gpu-ms', s.gpu_processing_ms.toFixed(1) + ' ms');
   setText('total-ms', s.total_processing_ms.toFixed(1) + ' ms');
 

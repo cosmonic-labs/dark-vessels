@@ -79,6 +79,7 @@ pub struct ProcessingStats {
     pub gpu_processing_ms: f64,
     pub total_processing_ms: f64,
     pub region: String,
+    pub compute_backend: String,
 }
 
 /// Full detection result returned by the processor
@@ -173,9 +174,9 @@ pub struct CfarParams {
 impl Default for CfarParams {
     fn default() -> Self {
         Self {
-            guard_cells: 3,
-            training_cells: 10,
-            threshold_factor: 4.0,
+            guard_cells: 2,
+            training_cells: 8,
+            threshold_factor: 3.0,
         }
     }
 }

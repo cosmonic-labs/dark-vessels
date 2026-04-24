@@ -5,6 +5,11 @@ world api-gateway {
 }
 
 world sar-processor {
+  import wasmcloud:messaging/consumer@0.2.0;
+  export wasmcloud:messaging/handler@0.2.0;
+}
+
+world sar-processor-gpu {
   import wasi:webgpu/webgpu@0.0.1;
   import wasmcloud:messaging/consumer@0.2.0;
   export wasmcloud:messaging/handler@0.2.0;
