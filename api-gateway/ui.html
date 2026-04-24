@@ -8,23 +8,16 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-@font-face { font-family: 'Mono'; src: local('SF Mono'), local('Menlo'), local('Consolas'); }
-body { font-family: 'Mono', monospace; background: #0a0e17; color: #c0c8d8; overflow: hidden; }
+body { font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; background: #0a0e17; color: #c0c8d8; overflow: hidden; }
 #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-#stats-panel {
-  position: absolute; top: 16px; right: 16px; width: 380px;
-  background: rgba(10, 14, 23, 0.92); border: 1px solid rgba(0, 255, 136, 0.25);
-  border-radius: 4px; padding: 20px; z-index: 10;
-  box-shadow: 0 0 30px rgba(0, 255, 136, 0.08), inset 0 0 60px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px); max-height: calc(100vh - 32px); overflow-y: auto;
-}
-#stats-panel::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, #00ff88, transparent);
-  animation: scanline 3s linear infinite;
-}
+/* Panel base */
+.panel { position: absolute; z-index: 10; background: rgba(10, 14, 23, 0.92); border: 1px solid rgba(0, 255, 136, 0.25); border-radius: 4px; padding: 20px; box-shadow: 0 0 30px rgba(0, 255, 136, 0.08), inset 0 0 60px rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px); }
+.panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #00ff88, transparent); animation: scanline 3s linear infinite; }
 @keyframes scanline { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+
+/* Stats panel */
+#stats-panel { top: 16px; right: 16px; width: 380px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .panel-title { font-size: 14px; letter-spacing: 3px; color: #00ff88; margin-bottom: 16px; text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
 .panel-subtitle { font-size: 10px; color: #4a5568; letter-spacing: 2px; margin-bottom: 12px; }
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -36,7 +29,6 @@ body { font-family: 'Mono', monospace; background: #0a0e17; color: #c0c8d8; over
 @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 .section-label { font-size: 10px; color: #4a5568; letter-spacing: 2px; text-transform: uppercase; margin: 12px 0 6px 0; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; }
 
-/* Size class bars */
 .size-bar-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .size-bar-label { font-size: 10px; color: #8892a4; width: 55px; text-transform: uppercase; letter-spacing: 1px; }
 .size-bar-track { flex: 1; height: 14px; background: rgba(255,255,255,0.05); border-radius: 2px; position: relative; overflow: hidden; }
@@ -57,23 +49,59 @@ body { font-family: 'Mono', monospace; background: #0a0e17; color: #c0c8d8; over
 .controls { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
 .control-row { display: flex; gap: 8px; align-items: center; }
 .control-row label { font-size: 10px; color: #8892a4; text-transform: uppercase; letter-spacing: 1px; min-width: 60px; }
-select, button { font-family: inherit; font-size: 11px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: #c0c8d8; padding: 6px 10px; border-radius: 2px; cursor: pointer; }
-select { flex: 1; }
+select, button, input[type=text], input[type=password] { font-family: inherit; font-size: 11px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: #c0c8d8; padding: 6px 10px; border-radius: 2px; }
+select, input[type=text], input[type=password] { flex: 1; }
+input::placeholder { color: #4a5568; }
+button { cursor: pointer; }
 button.primary { background: rgba(0, 255, 136, 0.15); border-color: rgba(0, 255, 136, 0.4); color: #00ff88; letter-spacing: 1px; text-transform: uppercase; font-weight: bold; transition: all 0.2s; }
 button.primary:hover { background: rgba(0, 255, 136, 0.25); box-shadow: 0 0 15px rgba(0, 255, 136, 0.2); }
 button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
 button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
+button.secondary { background: rgba(74, 144, 217, 0.15); border-color: rgba(74, 144, 217, 0.4); color: #4a90d9; letter-spacing: 1px; text-transform: uppercase; transition: all 0.2s; }
+button.secondary:hover { background: rgba(74, 144, 217, 0.25); }
+button.secondary.active { border-color: #00ff88; color: #00ff88; background: rgba(0, 255, 136, 0.15); }
+button.draw-btn { width: 100%; }
 @keyframes pulse-btn { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Credential indicators */
+.cred-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.cred-status.disconnected { background: #4a5568; }
+.cred-status.connected { background: #00ff88; box-shadow: 0 0 6px rgba(0, 255, 136, 0.5); }
+.cred-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+.cred-label { font-size: 10px; color: #8892a4; flex: 1; }
+.cred-action { font-size: 9px; padding: 3px 8px; }
+.info-btn { background: none; border: 1px solid rgba(255,255,255,0.2); color: #8892a4; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; padding: 0; text-align: center; line-height: 16px; cursor: pointer; flex-shrink: 0; }
+.info-btn:hover { border-color: #00d4ff; color: #00d4ff; }
+
+/* Bbox indicator */
+.bbox-indicator { font-size: 9px; color: #00d4ff; padding: 4px 8px; background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 2px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center; }
+.bbox-clear { cursor: pointer; color: #8892a4; font-size: 10px; }
+.bbox-clear:hover { color: #ff2244; }
+
 .powered-by { margin-top: 12px; font-size: 9px; color: #4a5568; text-align: center; letter-spacing: 1px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; }
 .powered-by span { color: #00d4ff; }
 
-/* Popup */
+/* Modal */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.modal-overlay.hidden { display: none; }
+.modal { background: #0f1520; border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 6px; padding: 24px; max-width: 460px; width: 90%; color: #c0c8d8; box-shadow: 0 0 40px rgba(0, 255, 136, 0.1); }
+.modal h3 { font-size: 14px; color: #00ff88; letter-spacing: 2px; margin-bottom: 12px; }
+.modal p { font-size: 12px; line-height: 1.6; margin-bottom: 10px; color: #a0a8b8; }
+.modal a { color: #00d4ff; text-decoration: none; }
+.modal a:hover { text-decoration: underline; }
+.modal .steps { margin: 12px 0; padding-left: 20px; }
+.modal .steps li { font-size: 11px; line-height: 1.8; color: #a0a8b8; }
+.modal .steps li strong { color: #e2e8f0; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.modal-actions button { flex: 1; }
+.modal input[type=text], .modal input[type=password] { width: 100%; margin: 8px 0; padding: 8px 12px; font-size: 12px; }
+
+/* Popup (vessel) */
 .maplibregl-popup-content { background: rgba(10, 14, 23, 0.95) !important; border: 1px solid rgba(0, 255, 136, 0.3) !important; border-radius: 4px !important; padding: 0 !important; color: #c0c8d8 !important; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5) !important; min-width: 300px; }
 .maplibregl-popup-tip { border-top-color: rgba(10, 14, 23, 0.95) !important; }
 .popup-card { padding: 14px; }
 .popup-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.popup-ship-img { width: 80px; height: 45px; }
-.popup-ship-img svg { width: 100%; height: 100%; }
+.popup-ship-img { width: 80px; height: 45px; } .popup-ship-img svg { width: 100%; height: 100%; }
 .popup-title { flex: 1; }
 .popup-name { font-size: 13px; font-weight: bold; color: #e2e8f0; }
 .popup-mmsi { font-size: 10px; color: #8892a4; }
@@ -84,18 +112,16 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
 .popup-warning { background: rgba(255, 34, 68, 0.15); border: 1px solid rgba(255, 34, 68, 0.4); color: #ff2244; text-align: center; padding: 6px; font-size: 11px; letter-spacing: 2px; font-weight: bold; margin: 8px 0; animation: pulse-red 1.5s ease-in-out infinite; }
 .popup-details { font-size: 11px; }
 .popup-detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.popup-detail-label { color: #8892a4; }
-.popup-detail-value { color: #e2e8f0; }
+.popup-detail-label { color: #8892a4; } .popup-detail-value { color: #e2e8f0; }
 .popup-size-badge { display: inline-block; padding: 1px 6px; border-radius: 2px; font-size: 9px; font-weight: bold; letter-spacing: 1px; margin-left: 6px; }
 .popup-size-badge.small { background: rgba(74,144,217,0.2); color: #6ab0ff; border: 1px solid rgba(74,144,217,0.4); }
 .popup-size-badge.medium { background: rgba(217,160,74,0.2); color: #ffc560; border: 1px solid rgba(217,160,74,0.4); }
 .popup-size-badge.large { background: rgba(217,74,106,0.2); color: #ff6080; border: 1px solid rgba(217,74,106,0.4); }
-
-/* Ship rectangle in popup */
 .ship-rect-container { margin: 10px 0; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 3px; text-align: center; }
 .ship-rect-label { font-size: 9px; color: #6b7280; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
-.ship-rect-svg { display: inline-block; }
-.ship-rect-dims { font-size: 10px; color: #8892a4; margin-top: 4px; }
+
+/* Draw mode crosshair */
+.draw-mode .maplibregl-canvas { cursor: crosshair !important; }
 
 /* Legend */
 #legend { position: absolute; bottom: 30px; left: 16px; z-index: 10; background: rgba(10, 14, 23, 0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 12px 16px; font-size: 11px; }
@@ -108,12 +134,25 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
 .legend-size { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .legend-size-dot { border-radius: 50%; background: #4a5568; }
 @keyframes pulse-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
+
+/* Draw mode banner */
+#draw-banner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; background: rgba(10,14,23,0.95); border: 1px solid #00d4ff; border-radius: 4px; padding: 16px 24px; text-align: center; pointer-events: none; }
+#draw-banner.hidden { display: none; }
+#draw-banner .title { color: #00d4ff; font-size: 13px; letter-spacing: 2px; }
+#draw-banner .subtitle { color: #8892a4; font-size: 11px; margin-top: 4px; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 
-<div id="stats-panel">
+<!-- Draw mode banner -->
+<div id="draw-banner" class="hidden">
+  <div class="title">DRAW BOUNDING BOX</div>
+  <div class="subtitle">Click and drag to select an area. Press ESC to cancel.</div>
+</div>
+
+<!-- Stats Panel -->
+<div id="stats-panel" class="panel">
   <div class="panel-title">DARK VESSELS</div>
   <div class="panel-subtitle">MARITIME SURVEILLANCE SYSTEM</div>
   <div class="stat-dark" id="dark-count">--</div>
@@ -128,42 +167,37 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
   <div class="stat-row"><span class="stat-label">AIS Anomalies</span><span class="stat-value amber" id="ais-only-count">--</span></div>
 
   <div class="section-label">SAR Size Classification</div>
-  <div class="size-bar-row">
-    <span class="size-bar-label">Small</span>
-    <div class="size-bar-track"><div class="size-bar-fill small" id="bar-small" style="width:0%"></div></div>
-    <span class="size-bar-count" id="count-small">0</span>
-    <span class="size-bar-dims">&lt;50m</span>
-  </div>
-  <div class="size-bar-row">
-    <span class="size-bar-label">Medium</span>
-    <div class="size-bar-track"><div class="size-bar-fill medium" id="bar-medium" style="width:0%"></div></div>
-    <span class="size-bar-count" id="count-medium">0</span>
-    <span class="size-bar-dims">50-200m</span>
-  </div>
-  <div class="size-bar-row">
-    <span class="size-bar-label">Large</span>
-    <div class="size-bar-track"><div class="size-bar-fill large" id="bar-large" style="width:0%"></div></div>
-    <span class="size-bar-count" id="count-large">0</span>
-    <span class="size-bar-dims">&gt;200m</span>
-  </div>
+  <div class="size-bar-row"><span class="size-bar-label">Small</span><div class="size-bar-track"><div class="size-bar-fill small" id="bar-small" style="width:0%"></div></div><span class="size-bar-count" id="count-small">0</span><span class="size-bar-dims">&lt;50m</span></div>
+  <div class="size-bar-row"><span class="size-bar-label">Medium</span><div class="size-bar-track"><div class="size-bar-fill medium" id="bar-medium" style="width:0%"></div></div><span class="size-bar-count" id="count-medium">0</span><span class="size-bar-dims">50-200m</span></div>
+  <div class="size-bar-row"><span class="size-bar-label">Large</span><div class="size-bar-track"><div class="size-bar-fill large" id="bar-large" style="width:0%"></div></div><span class="size-bar-count" id="count-large">0</span><span class="size-bar-dims">&gt;200m</span></div>
 
   <div class="section-label">Performance</div>
   <div class="stat-row"><span class="stat-label">Compute Backend</span><span class="stat-value cyan" id="backend">--</span></div>
   <div class="stat-row"><span class="stat-label">CFAR Processing</span><span class="stat-value cyan" id="gpu-ms">--</span></div>
   <div class="stat-row"><span class="stat-label">Total Pipeline</span><span class="stat-value" id="total-ms">--</span></div>
 
-  <div class="pipeline">
-    <div class="pipeline-flow">
-      <div class="pipeline-node">SAR Image<span class="pipeline-count" id="pl-sar">--</span></div>
-      <span class="pipeline-arrow">&rarr;</span>
-      <div class="pipeline-node gpu">GPU CFAR<span class="pipeline-count" id="pl-cfar">--</span></div>
-      <span class="pipeline-arrow">&rarr;</span>
-      <div class="pipeline-node">Spatial Join<span class="pipeline-count" id="pl-join">--</span></div>
-      <span class="pipeline-arrow">&rarr;</span>
-      <div class="pipeline-node">Results<span class="pipeline-count" id="pl-results">--</span></div>
-    </div>
+  <div class="pipeline"><div class="pipeline-flow">
+    <div class="pipeline-node">SAR Image<span class="pipeline-count" id="pl-sar">--</span></div><span class="pipeline-arrow">&rarr;</span>
+    <div class="pipeline-node gpu">GPU CFAR<span class="pipeline-count" id="pl-cfar">--</span></div><span class="pipeline-arrow">&rarr;</span>
+    <div class="pipeline-node">Spatial Join<span class="pipeline-count" id="pl-join">--</span></div><span class="pipeline-arrow">&rarr;</span>
+    <div class="pipeline-node">Results<span class="pipeline-count" id="pl-results">--</span></div>
+  </div></div>
+
+  <div class="section-label">Data Sources</div>
+  <div class="cred-row">
+    <span class="cred-status disconnected" id="cdse-dot"></span>
+    <span class="cred-label">Copernicus SAR</span>
+    <button class="info-btn" onclick="showModal('cdse-info')">?</button>
+    <button class="cred-action secondary" id="cdse-btn" onclick="showModal('cdse-login')">Connect</button>
+  </div>
+  <div class="cred-row">
+    <span class="cred-status disconnected" id="ais-dot"></span>
+    <span class="cred-label">AISHub Telemetry</span>
+    <button class="info-btn" onclick="showModal('ais-info')">?</button>
+    <button class="cred-action secondary" id="ais-btn" onclick="showModal('ais-login')">Enter Key</button>
   </div>
 
+  <div class="section-label">Controls</div>
   <div class="controls">
     <div class="control-row">
       <label>Region</label>
@@ -172,22 +206,21 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
         <option value="persian_gulf">Persian Gulf</option>
         <option value="gulf_of_oman">Gulf of Oman</option>
         <option value="bab_el_mandeb">Bab el-Mandeb</option>
+        <option value="custom" id="custom-region-opt" disabled>Custom Area</option>
       </select>
+    </div>
+    <button class="secondary draw-btn" id="draw-btn" onclick="startDraw()">Draw Custom Bounding Box</button>
+    <div id="bbox-display" class="bbox-indicator" style="display:none">
+      <span id="bbox-text"></span>
+      <span class="bbox-clear" onclick="clearBbox()">&times; Clear</span>
     </div>
     <div class="control-row">
       <label>SAR Size</label>
-      <select id="size-select">
-        <option value="512">512 x 512</option>
-        <option value="1024">1024 x 1024</option>
-        <option value="2048">2048 x 2048</option>
-      </select>
+      <select id="size-select"><option value="512">512 x 512</option><option value="1024">1024 x 1024</option><option value="2048">2048 x 2048</option></select>
     </div>
     <div class="control-row">
       <label>Units</label>
-      <select id="units-select">
-        <option value="feet" selected>Feet</option>
-        <option value="meters">Meters</option>
-      </select>
+      <select id="units-select"><option value="feet" selected>Feet</option><option value="meters">Meters</option></select>
     </div>
     <button class="primary" id="run-btn" onclick="runDetection()">RUN DETECTION</button>
   </div>
@@ -204,235 +237,317 @@ button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
   <div class="legend-size"><div class="legend-size-dot" style="width:20px;height:20px"></div> Large (&gt;656 ft)</div>
 </div>
 
+<!-- Modals -->
+<div id="modal-cdse-info" class="modal-overlay hidden" onclick="if(event.target===this)hideModals()">
+  <div class="modal">
+    <h3>Copernicus SAR Data</h3>
+    <p>Sentinel-1 provides free, open-access Synthetic Aperture Radar (SAR) imagery covering the world's oceans. SAR can detect ships regardless of weather or time of day.</p>
+    <p>To connect to live satellite data:</p>
+    <ol class="steps">
+      <li>Create a free account at <a href="https://dataspace.copernicus.eu" target="_blank">dataspace.copernicus.eu</a></li>
+      <li>Go to your <strong>Dashboard</strong> and generate an <strong>API token</strong></li>
+      <li>Click <strong>"Connect"</strong> on the data sources panel and enter your credentials</li>
+    </ol>
+    <p>Without credentials, the system uses <strong>synthetic SAR data</strong> for demonstration.</p>
+    <div class="modal-actions"><button class="primary" onclick="hideModals()">Got it</button></div>
+  </div>
+</div>
+
+<div id="modal-cdse-login" class="modal-overlay hidden" onclick="if(event.target===this)hideModals()">
+  <div class="modal">
+    <h3>Connect to Copernicus CDSE</h3>
+    <p>Enter your Copernicus Data Space credentials. These are stored locally in your browser and sent only to the Copernicus API.</p>
+    <input type="text" id="cdse-username" placeholder="Email / Username">
+    <input type="password" id="cdse-password" placeholder="Password">
+    <p style="font-size:10px;color:#6b7280;">Your credentials are stored in a browser cookie and never leave your machine except to authenticate with Copernicus.</p>
+    <div class="modal-actions">
+      <button class="secondary" onclick="hideModals()">Cancel</button>
+      <button class="primary" onclick="saveCdse()">Connect &amp; Authenticate</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-ais-info" class="modal-overlay hidden" onclick="if(event.target===this)hideModals()">
+  <div class="modal">
+    <h3>AISHub Vessel Telemetry</h3>
+    <p>AIS (Automatic Identification System) is a maritime tracking system. Ships broadcast their identity, position, and course via radio. AISHub aggregates this data from a global network of receivers.</p>
+    <p>To get live AIS data:</p>
+    <ol class="steps">
+      <li>Register at <a href="https://www.aishub.net" target="_blank">aishub.net</a></li>
+      <li>To receive an API key, you need to <strong>share an AIS receiver</strong> or purchase a data plan</li>
+      <li>Once approved, your API key appears in your account dashboard</li>
+    </ol>
+    <p>Without a key, the system uses <strong>synthetic AIS data</strong> with realistic vessel names and positions.</p>
+    <div class="modal-actions"><button class="primary" onclick="hideModals()">Got it</button></div>
+  </div>
+</div>
+
+<div id="modal-ais-login" class="modal-overlay hidden" onclick="if(event.target===this)hideModals()">
+  <div class="modal">
+    <h3>Enter AISHub API Key</h3>
+    <p>Paste your AISHub API key below. This is stored locally in your browser and sent only to the AISHub API.</p>
+    <input type="password" id="ais-key-input" placeholder="AISHub API Key (e.g. a1b2c3d4e5...)">
+    <p style="font-size:10px;color:#6b7280;">Your key is stored in a browser cookie and never leaves your machine except to query AISHub.</p>
+    <div class="modal-actions">
+      <button class="secondary" onclick="hideModals()">Cancel</button>
+      <button class="primary" onclick="saveAisKey()">Save Key</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SHIP_SVGS = {
   tanker: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 35 L15 40 L105 40 L115 35 L110 30 L100 28 L95 20 L90 18 L85 20 L80 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="25" y="20" width="50" height="8" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="85" y="12" width="8" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><line x1="89" y1="6" x2="89" y2="12" stroke="#4a90d9" stroke-width="1"/></svg>`,
-  cargo: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="25" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="42" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="59" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="85" y="12" width="12" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><line x1="91" y1="5" x2="91" y2="12" stroke="#4a90d9" stroke-width="1"/></svg>`,
-  container: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="22" y="18" width="60" height="10" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="25" y="10" width="54" height="8" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><line x1="37" y1="10" x2="37" y2="28" stroke="#4a90d9" stroke-width="0.5"/><line x1="52" y1="10" x2="52" y2="28" stroke="#4a90d9" stroke-width="0.5"/><line x1="67" y1="10" x2="67" y2="28" stroke="#4a90d9" stroke-width="0.5"/><rect x="90" y="12" width="10" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/></svg>`,
-  fishing: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M20 35 L30 40 L90 40 L100 35 L95 30 L30 30 L25 32 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="65" y="18" width="10" height="12" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><line x1="70" y1="8" x2="70" y2="18" stroke="#4a90d9" stroke-width="1.5"/><line x1="70" y1="8" x2="45" y2="16" stroke="#4a90d9" stroke-width="0.7"/><line x1="70" y1="8" x2="88" y2="16" stroke="#4a90d9" stroke-width="0.7"/></svg>`,
+  cargo: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="25" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="42" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="59" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="85" y="12" width="12" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/></svg>`,
+  container: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="22" y="18" width="60" height="10" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><rect x="25" y="10" width="54" height="8" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/></svg>`,
+  fishing: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M20 35 L30 40 L90 40 L100 35 L95 30 L30 30 L25 32 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><line x1="70" y1="8" x2="70" y2="30" stroke="#4a90d9" stroke-width="1.5"/><line x1="70" y1="8" x2="45" y2="16" stroke="#4a90d9" stroke-width="0.7"/></svg>`,
   military: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M5 33 L10 38 L110 38 L118 33 L115 30 L100 27 L90 25 L80 27 L70 25 L20 25 L10 28 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/><rect x="55" y="15" width="15" height="10" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/><line x1="62" y1="8" x2="62" y2="15" stroke="#4a90d9" stroke-width="1.5"/><circle cx="62" cy="8" r="2" fill="none" stroke="#4a90d9" stroke-width="1"/></svg>`,
   unknown: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg"><path d="M15 35 L25 40 L95 40 L105 35 L100 28 L25 28 L20 30 Z" fill="none" stroke="#ff2244" stroke-width="1.5"/><text x="60" y="24" text-anchor="middle" font-size="16" fill="#ff2244" font-family="monospace">?</text></svg>`
 };
+const REGION_CENTERS = { strait_of_hormuz: {center:[56,25.8],zoom:7.5}, persian_gulf: {center:[51.5,27],zoom:6.5}, gulf_of_oman: {center:[58.5,24.5],zoom:7}, bab_el_mandeb: {center:[43.3,12.6],zoom:8} };
 
-const REGION_CENTERS = {
-  strait_of_hormuz: { center: [56.0, 25.8], zoom: 7.5 },
-  persian_gulf: { center: [51.5, 27.0], zoom: 6.5 },
-  gulf_of_oman: { center: [58.5, 24.5], zoom: 7 },
-  bab_el_mandeb: { center: [43.3, 12.6], zoom: 8 },
-};
-
-let map, currentData = null;
+let map, currentData = null, customBbox = null, drawState = null;
 const M_TO_FT = 3.28084;
 
+// --- Cookie helpers ---
+function setCookie(k, v) { document.cookie = k+'='+encodeURIComponent(v)+';max-age=31536000;path=/;SameSite=Strict'; }
+function getCookie(k) { const m = document.cookie.match(new RegExp('(?:^|; )'+k+'=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }
+function delCookie(k) { document.cookie = k+'=;max-age=0;path=/'; }
+
 function getUnits() { return document.getElementById('units-select').value; }
-function fmtDim(meters) {
-  if (getUnits() === 'feet') return (meters * M_TO_FT).toFixed(0) + ' ft';
-  return meters.toFixed(1) + ' m';
+function fmtDim(m) { return getUnits()==='feet' ? (m*M_TO_FT).toFixed(0)+' ft' : m.toFixed(1)+' m'; }
+
+// --- Credential management ---
+function updateCredUI() {
+  const cdse = getCookie('cdse_creds');
+  const ais = getCookie('aishub_key');
+  document.getElementById('cdse-dot').className = 'cred-status ' + (cdse ? 'connected' : 'disconnected');
+  document.getElementById('cdse-btn').textContent = cdse ? 'Connected' : 'Connect';
+  document.getElementById('ais-dot').className = 'cred-status ' + (ais ? 'connected' : 'disconnected');
+  document.getElementById('ais-btn').textContent = ais ? 'Key Saved' : 'Enter Key';
 }
-function fmtDimShort(meters) {
-  if (getUnits() === 'feet') return (meters * M_TO_FT).toFixed(0) + "'";
-  return meters.toFixed(0) + 'm';
+function saveCdse() {
+  const u = document.getElementById('cdse-username').value.trim();
+  const p = document.getElementById('cdse-password').value;
+  if (!u || !p) return;
+  setCookie('cdse_creds', JSON.stringify({username:u,password:p}));
+  hideModals(); updateCredUI();
+}
+function saveAisKey() {
+  const k = document.getElementById('ais-key-input').value.trim();
+  if (!k) return;
+  setCookie('aishub_key', k);
+  hideModals(); updateCredUI();
 }
 
-// Map marker size based on size_class
-function sizeClassRadius(sc) {
-  if (sc === 'large') return 12;
-  if (sc === 'medium') return 8;
-  return 5;
+// --- Modals ---
+function showModal(id) { document.getElementById('modal-'+id).classList.remove('hidden'); }
+function hideModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden')); }
+document.addEventListener('keydown', e => { if (e.key==='Escape') { hideModals(); if (drawState) cancelDraw(); } });
+
+// --- Bounding box draw ---
+function startDraw() {
+  drawState = { phase: 'waiting' };
+  document.getElementById('draw-banner').classList.remove('hidden');
+  document.getElementById('draw-btn').classList.add('active');
+  document.getElementById('draw-btn').textContent = 'Click map to start...';
+  document.body.classList.add('draw-mode');
+  // Remove old bbox layer if exists
+  if (map.getLayer('draw-bbox')) map.removeLayer('draw-bbox');
+  if (map.getSource('draw-bbox')) map.removeSource('draw-bbox');
+}
+function cancelDraw() {
+  drawState = null;
+  document.getElementById('draw-banner').classList.add('hidden');
+  document.getElementById('draw-btn').classList.remove('active');
+  document.getElementById('draw-btn').textContent = 'Draw Custom Bounding Box';
+  document.body.classList.remove('draw-mode');
+  if (map.getLayer('draw-bbox-preview')) map.removeLayer('draw-bbox-preview');
+  if (map.getSource('draw-bbox-preview')) map.removeSource('draw-bbox-preview');
+}
+function finishDraw(sw, ne) {
+  customBbox = { min_lat: Math.min(sw.lat,ne.lat), max_lat: Math.max(sw.lat,ne.lat), min_lon: Math.min(sw.lng,ne.lng), max_lon: Math.max(sw.lng,ne.lng) };
+  document.getElementById('draw-banner').classList.add('hidden');
+  document.getElementById('draw-btn').classList.remove('active');
+  document.getElementById('draw-btn').textContent = 'Draw Custom Bounding Box';
+  document.body.classList.remove('draw-mode');
+  // Show bbox on map
+  showBboxRect(customBbox);
+  // Update UI
+  document.getElementById('bbox-display').style.display = 'flex';
+  document.getElementById('bbox-text').textContent = customBbox.min_lat.toFixed(2)+','+customBbox.min_lon.toFixed(2)+' to '+customBbox.max_lat.toFixed(2)+','+customBbox.max_lon.toFixed(2);
+  document.getElementById('custom-region-opt').disabled = false;
+  document.getElementById('region-select').value = 'custom';
+  drawState = null;
+  // Clean preview
+  if (map.getLayer('draw-bbox-preview')) map.removeLayer('draw-bbox-preview');
+  if (map.getSource('draw-bbox-preview')) map.removeSource('draw-bbox-preview');
+}
+function clearBbox() {
+  customBbox = null;
+  document.getElementById('bbox-display').style.display = 'none';
+  document.getElementById('custom-region-opt').disabled = true;
+  document.getElementById('region-select').value = 'strait_of_hormuz';
+  if (map.getLayer('draw-bbox')) map.removeLayer('draw-bbox');
+  if (map.getSource('draw-bbox')) map.removeSource('draw-bbox');
+}
+function showBboxRect(b) {
+  const coords = [[[b.min_lon,b.min_lat],[b.max_lon,b.min_lat],[b.max_lon,b.max_lat],[b.min_lon,b.max_lat],[b.min_lon,b.min_lat]]];
+  const data = {type:'Feature',geometry:{type:'Polygon',coordinates:coords}};
+  if (map.getSource('draw-bbox')) { map.getSource('draw-bbox').setData(data); }
+  else {
+    map.addSource('draw-bbox', {type:'geojson',data});
+    map.addLayer({id:'draw-bbox',type:'line',source:'draw-bbox',paint:{'line-color':'#00d4ff','line-width':2,'line-dasharray':[4,2]}});
+  }
+}
+function bboxPoly(sw, ne) {
+  return [[[sw.lng,sw.lat],[ne.lng,sw.lat],[ne.lng,ne.lat],[sw.lng,ne.lat],[sw.lng,sw.lat]]];
 }
 
+// --- Map init ---
 map = new maplibregl.Map({
   container: 'map',
-  style: {
-    version: 8,
-    sources: { 'osm-tiles': { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap' } },
-    layers: [{ id: 'osm-layer', type: 'raster', source: 'osm-tiles', paint: { 'raster-saturation': -0.8, 'raster-brightness-max': 0.35, 'raster-contrast': 0.3 } }]
-  },
-  center: [56.0, 25.8], zoom: 7.5, maxZoom: 14, minZoom: 3
+  style: { version:8, sources:{'osm-tiles':{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'&copy; OpenStreetMap'}}, layers:[{id:'osm-layer',type:'raster',source:'osm-tiles',paint:{'raster-saturation':-0.8,'raster-brightness-max':0.35,'raster-contrast':0.3}}] },
+  center: [56,25.8], zoom: 7.5, maxZoom: 14, minZoom: 3
 });
 
 map.on('load', () => {
-  map.addSource('vessels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addSource('vessels', {type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  const sizeExpr = ['match',['get','size_class'],'large',12,'medium',8,'small',5,6];
+  const glowExpr = ['match',['get','size_class'],'large',26,'medium',18,'small',12,16];
 
-  // Size-driven circle radius expression
-  const sizeExpr = ['match', ['get', 'size_class'], 'large', 12, 'medium', 8, 'small', 5, 6];
-  const glowSizeExpr = ['match', ['get', 'size_class'], 'large', 26, 'medium', 18, 'small', 12, 16];
+  map.addLayer({id:'vessels-matched',type:'circle',source:'vessels',filter:['==',['get','status'],'matched'],paint:{'circle-radius':sizeExpr,'circle-color':'#00ff88','circle-opacity':0.85,'circle-stroke-width':1.5,'circle-stroke-color':'#00cc6a'}});
+  map.addLayer({id:'vessels-dark-glow',type:'circle',source:'vessels',filter:['==',['get','status'],'dark_vessel'],paint:{'circle-radius':glowExpr,'circle-color':'#ff2244','circle-opacity':0.15,'circle-stroke-width':0,'circle-blur':1}});
+  map.addLayer({id:'vessels-dark',type:'circle',source:'vessels',filter:['==',['get','status'],'dark_vessel'],paint:{'circle-radius':sizeExpr,'circle-color':'#ff2244','circle-opacity':0.95,'circle-stroke-width':2,'circle-stroke-color':'#ff4466'}});
+  map.addLayer({id:'vessels-ais-only',type:'circle',source:'vessels',filter:['==',['get','status'],'ais_only'],paint:{'circle-radius':6,'circle-color':'transparent','circle-stroke-width':2.5,'circle-stroke-color':'#ffaa00','circle-stroke-opacity':0.85}});
 
-  map.addLayer({ id: 'vessels-matched', type: 'circle', source: 'vessels',
-    filter: ['==', ['get', 'status'], 'matched'],
-    paint: { 'circle-radius': sizeExpr, 'circle-color': '#00ff88', 'circle-opacity': 0.85, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#00cc6a' }
-  });
-  map.addLayer({ id: 'vessels-dark-glow', type: 'circle', source: 'vessels',
-    filter: ['==', ['get', 'status'], 'dark_vessel'],
-    paint: { 'circle-radius': glowSizeExpr, 'circle-color': '#ff2244', 'circle-opacity': 0.15, 'circle-stroke-width': 0, 'circle-blur': 1 }
-  });
-  map.addLayer({ id: 'vessels-dark', type: 'circle', source: 'vessels',
-    filter: ['==', ['get', 'status'], 'dark_vessel'],
-    paint: { 'circle-radius': sizeExpr, 'circle-color': '#ff2244', 'circle-opacity': 0.95, 'circle-stroke-width': 2, 'circle-stroke-color': '#ff4466' }
-  });
-  map.addLayer({ id: 'vessels-ais-only', type: 'circle', source: 'vessels',
-    filter: ['==', ['get', 'status'], 'ais_only'],
-    paint: { 'circle-radius': 6, 'circle-color': 'transparent', 'circle-stroke-width': 2.5, 'circle-stroke-color': '#ffaa00', 'circle-stroke-opacity': 0.85 }
+  ['vessels-matched','vessels-dark','vessels-ais-only'].forEach(layer => {
+    map.on('mouseenter',layer,()=>{if(!drawState)map.getCanvas().style.cursor='pointer';});
+    map.on('mouseleave',layer,()=>{if(!drawState)map.getCanvas().style.cursor='';});
+    map.on('click',layer,e=>{if(!drawState&&e.features.length)showPopup(e.features[0].geometry.coordinates.slice(),e.features[0].properties);});
   });
 
-  const interactiveLayers = ['vessels-matched', 'vessels-dark', 'vessels-ais-only'];
-  interactiveLayers.forEach(layer => {
-    map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
-    map.on('click', layer, (e) => {
-      if (!e.features.length) return;
-      showPopup(e.features[0].geometry.coordinates.slice(), e.features[0].properties);
-    });
+  // Draw mode: mousedown starts, mousemove previews, mouseup finishes
+  map.on('mousedown', e => {
+    if (!drawState || drawState.phase !== 'waiting') return;
+    drawState = { phase:'dragging', start: e.lngLat };
+    e.preventDefault();
+    map.dragPan.disable();
   });
-
-  let pulsePhase = 0;
-  function animatePulse() {
-    pulsePhase = (pulsePhase + 0.03) % (2 * Math.PI);
-    const s = Math.sin(pulsePhase);
-    if (map.getLayer('vessels-dark-glow')) {
-      map.setPaintProperty('vessels-dark-glow', 'circle-opacity', 0.1 + 0.08 * s);
+  map.on('mousemove', e => {
+    if (!drawState || drawState.phase !== 'dragging') return;
+    const sw = drawState.start, ne = e.lngLat;
+    const coords = bboxPoly(sw, ne);
+    const data = {type:'Feature',geometry:{type:'Polygon',coordinates:coords}};
+    if (map.getSource('draw-bbox-preview')) { map.getSource('draw-bbox-preview').setData(data); }
+    else {
+      map.addSource('draw-bbox-preview',{type:'geojson',data});
+      map.addLayer({id:'draw-bbox-preview',type:'fill',source:'draw-bbox-preview',paint:{'fill-color':'#00d4ff','fill-opacity':0.15,'fill-outline-color':'#00d4ff'}});
     }
-    requestAnimationFrame(animatePulse);
-  }
-  animatePulse();
+    document.getElementById('draw-btn').textContent = 'Drag to size... release to confirm';
+  });
+  map.on('mouseup', e => {
+    if (!drawState || drawState.phase !== 'dragging') return;
+    map.dragPan.enable();
+    finishDraw(drawState.start, e.lngLat);
+  });
+
+  // Pulse animation
+  let ph=0;
+  (function pulse(){ph=(ph+0.03)%(2*Math.PI);if(map.getLayer('vessels-dark-glow'))map.setPaintProperty('vessels-dark-glow','circle-opacity',0.1+0.08*Math.sin(ph));requestAnimationFrame(pulse);})();
+
+  updateCredUI();
   runDetection();
 });
 
-function makeShipRect(lengthM, beamM, status) {
-  // Scaled SVG rectangle showing the ship's SAR footprint
-  const maxW = 160, maxH = 50;
-  const ratio = lengthM / beamM;
-  let w, h;
-  if (ratio > maxW / maxH) { w = maxW; h = Math.max(8, maxW / ratio); }
-  else { h = maxH; w = Math.max(20, maxH * ratio); }
-  const color = status === 'dark_vessel' ? '#ff2244' : status === 'matched' ? '#00ff88' : '#ffaa00';
-  const pad = 4;
-  const svgW = w + pad * 2 + 40; // extra for dimension labels
-  const svgH = h + pad * 2 + 20;
+function makeShipRect(lm,bm,status) {
+  const maxW=160,maxH=50,ratio=lm/bm;
+  let w,h;
+  if(ratio>maxW/maxH){w=maxW;h=Math.max(8,maxW/ratio);}else{h=maxH;w=Math.max(20,maxH*ratio);}
+  const color=status==='dark_vessel'?'#ff2244':status==='matched'?'#00ff88':'#ffaa00';
+  const pad=4,svgW=w+pad*2+40,svgH=h+pad*2+20;
   return `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
     <rect x="${pad}" y="${pad}" width="${w}" height="${h}" rx="2" fill="${color}22" stroke="${color}" stroke-width="1.5" stroke-dasharray="4,2"/>
-    <text x="${pad + w/2}" y="${svgH - 2}" text-anchor="middle" font-size="9" fill="#8892a4" font-family="monospace">${fmtDim(lengthM)}</text>
-    <text x="${w + pad + 6}" y="${pad + h/2 + 3}" font-size="9" fill="#8892a4" font-family="monospace">${fmtDim(beamM)}</text>
-  </svg>`;
+    <text x="${pad+w/2}" y="${svgH-2}" text-anchor="middle" font-size="9" fill="#8892a4" font-family="monospace">${fmtDim(lm)}</text>
+    <text x="${w+pad+6}" y="${pad+h/2+3}" font-size="9" fill="#8892a4" font-family="monospace">${fmtDim(bm)}</text></svg>`;
 }
 
-function showPopup(coords, props) {
-  const status = props.status;
-  const vesselType = props.vessel_type || 'unknown';
-  const svg = SHIP_SVGS[vesselType] || SHIP_SVGS.unknown;
-  const isDark = status === 'dark_vessel';
-  const sc = props.size_class;
-
-  let html = `<div class="popup-card">`;
-  html += `<div class="popup-header">`;
-  html += `<div class="popup-ship-img">${svg}</div>`;
-  html += `<div class="popup-title">`;
-  if (props.name) {
-    html += `<div class="popup-name">${props.name}</div>`;
-    html += `<div class="popup-mmsi">MMSI: ${props.mmsi}</div>`;
-  } else {
-    html += `<div class="popup-name" style="color:#ff2244">UNKNOWN VESSEL</div>`;
-    html += `<div class="popup-mmsi">NO IDENTIFICATION</div>`;
-  }
-  html += `</div>`;
-  html += `<span class="popup-badge ${status}">${status.replace('_', ' ')}</span>`;
-  if (sc) html += `<span class="popup-size-badge ${sc}">${sc.toUpperCase()}</span>`;
-  html += `</div>`;
-
-  if (isDark) html += `<div class="popup-warning">&#9888; NO AIS SIGNAL DETECTED</div>`;
-
-  // SAR-derived ship rectangle
-  if (props.length_m && props.beam_m) {
-    html += `<div class="ship-rect-container">`;
-    html += `<div class="ship-rect-label">SAR Radar Footprint</div>`;
-    html += `<div class="ship-rect-svg">${makeShipRect(props.length_m, props.beam_m, status)}</div>`;
-    html += `</div>`;
-  }
-
-  html += `<div class="popup-details">`;
-  if (props.vessel_type) html += detailRow('Type', props.vessel_type.toUpperCase());
-  if (props.length_m) html += detailRow('Length (SAR)', fmtDim(props.length_m));
-  if (props.beam_m) html += detailRow('Beam (SAR)', fmtDim(props.beam_m));
-  if (props.pixel_count) html += detailRow('SAR Pixels', props.pixel_count + ' px');
-  if (props.destination) html += detailRow('Destination', props.destination);
-  if (props.heading != null) html += detailRow('Heading', props.heading.toFixed(1) + '&deg;');
-  if (props.speed_knots != null) html += detailRow('Speed', props.speed_knots.toFixed(1) + ' kn');
-  html += detailRow('Position', coords[1].toFixed(4) + ', ' + coords[0].toFixed(4));
-  if (props.intensity_db != null) html += detailRow('Radar Intensity', props.intensity_db.toFixed(1) + ' dB');
-  if (props.rcs != null) html += detailRow('Radar Cross Section', props.rcs.toFixed(1) + ' m&sup2;');
-  html += `</div></div>`;
-
-  new maplibregl.Popup({ closeOnClick: true, maxWidth: '340px' }).setLngLat(coords).setHTML(html).addTo(map);
+function showPopup(coords,p) {
+  const svg=SHIP_SVGS[p.vessel_type||'unknown']||SHIP_SVGS.unknown;
+  let h=`<div class="popup-card"><div class="popup-header"><div class="popup-ship-img">${svg}</div><div class="popup-title">`;
+  if(p.name){h+=`<div class="popup-name">${p.name}</div><div class="popup-mmsi">MMSI: ${p.mmsi}</div>`;}
+  else{h+=`<div class="popup-name" style="color:#ff2244">UNKNOWN VESSEL</div><div class="popup-mmsi">NO IDENTIFICATION</div>`;}
+  h+=`</div><span class="popup-badge ${p.status}">${p.status.replace('_',' ')}</span>`;
+  if(p.size_class)h+=`<span class="popup-size-badge ${p.size_class}">${p.size_class.toUpperCase()}</span>`;
+  h+=`</div>`;
+  if(p.status==='dark_vessel')h+=`<div class="popup-warning">&#9888; NO AIS SIGNAL DETECTED</div>`;
+  if(p.length_m&&p.beam_m)h+=`<div class="ship-rect-container"><div class="ship-rect-label">SAR Radar Footprint</div>${makeShipRect(p.length_m,p.beam_m,p.status)}</div>`;
+  h+=`<div class="popup-details">`;
+  if(p.vessel_type)h+=dr('Type',p.vessel_type.toUpperCase());
+  if(p.length_m)h+=dr('Length (SAR)',fmtDim(p.length_m));
+  if(p.beam_m)h+=dr('Beam (SAR)',fmtDim(p.beam_m));
+  if(p.pixel_count)h+=dr('SAR Pixels',p.pixel_count+' px');
+  if(p.destination)h+=dr('Destination',p.destination);
+  if(p.heading!=null)h+=dr('Heading',p.heading.toFixed(1)+'&deg;');
+  if(p.speed_knots!=null)h+=dr('Speed',p.speed_knots.toFixed(1)+' kn');
+  h+=dr('Position',coords[1].toFixed(4)+', '+coords[0].toFixed(4));
+  if(p.intensity_db!=null)h+=dr('Radar Intensity',p.intensity_db.toFixed(1)+' dB');
+  if(p.rcs!=null)h+=dr('Radar Cross Section',p.rcs.toFixed(1)+' m&sup2;');
+  h+=`</div></div>`;
+  new maplibregl.Popup({closeOnClick:true,maxWidth:'340px'}).setLngLat(coords).setHTML(h).addTo(map);
 }
-
-function detailRow(label, value) {
-  return `<div class="popup-detail-row"><span class="popup-detail-label">${label}</span><span class="popup-detail-value">${value}</span></div>`;
-}
+function dr(l,v){return `<div class="popup-detail-row"><span class="popup-detail-label">${l}</span><span class="popup-detail-value">${v}</span></div>`;}
 
 async function runDetection() {
-  const btn = document.getElementById('run-btn');
-  btn.disabled = true; btn.classList.add('loading'); btn.textContent = 'PROCESSING...';
-  const region = document.getElementById('region-select').value;
-  const size = parseInt(document.getElementById('size-select').value);
-  const seed = Math.floor(Math.random() * 100000);
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true;btn.classList.add('loading');btn.textContent='PROCESSING...';
+  const region=document.getElementById('region-select').value;
+  const size=parseInt(document.getElementById('size-select').value);
+  const seed=Math.floor(Math.random()*100000);
+  const body={region,sar_width:size,sar_height:size,num_targets:Math.floor(size/12),seed};
+  if(customBbox&&region==='custom')body.custom_bbox=customBbox;
+  // Attach credentials from cookies
+  const cdse=getCookie('cdse_creds'); if(cdse){try{const c=JSON.parse(cdse);body.cdse_token=c.username+':'+c.password;}catch(e){}}
+  const ais=getCookie('aishub_key'); if(ais)body.aishub_key=ais;
   try {
-    const resp = await fetch('/api/detect', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ region, sar_width: size, sar_height: size, num_targets: Math.floor(size / 12), seed })
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    currentData = data;
+    const resp=await fetch('/api/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+    const data=await resp.json();
+    currentData=data;
     map.getSource('vessels').setData(data);
-    const rc = REGION_CENTERS[region];
-    if (rc) map.flyTo({ center: rc.center, zoom: rc.zoom, duration: 1500 });
+    if(region!=='custom'){const rc=REGION_CENTERS[region];if(rc)map.flyTo({center:rc.center,zoom:rc.zoom,duration:1500});}
+    else if(customBbox){map.fitBounds([[customBbox.min_lon,customBbox.min_lat],[customBbox.max_lon,customBbox.max_lat]],{padding:40,duration:1500});}
     updateStats(data.stats);
-  } catch (err) { console.error('Detection failed:', err); }
-  finally { btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'RUN DETECTION'; }
+  }catch(err){console.error('Detection failed:',err);}
+  finally{btn.disabled=false;btn.classList.remove('loading');btn.textContent='RUN DETECTION';}
 }
 
 function updateStats(s) {
-  animateValue('dark-count', s.dark_vessels);
-  setText('sar-dims', s.sar_image_width + ' x ' + s.sar_image_height);
-  animateValue('total-pixels', s.total_pixels);
-  animateValue('cfar-dets', s.cfar_detections);
-  animateValue('ais-recs', s.ais_records);
-  animateValue('matched-count', s.matched);
-  animateValue('dark-count-2', s.dark_vessels);
-  animateValue('ais-only-count', s.ais_only);
-  setText('backend', s.compute_backend || 'Unknown');
-  setText('gpu-ms', s.gpu_processing_ms.toFixed(1) + ' ms');
-  setText('total-ms', s.total_processing_ms.toFixed(1) + ' ms');
-  setText('pl-sar', (s.total_pixels).toLocaleString() + ' px');
-  setText('pl-cfar', s.cfar_detections + ' hits');
-  setText('pl-join', (s.matched + s.dark_vessels + s.ais_only) + ' vessels');
-  setText('pl-results', s.dark_vessels + ' dark');
-
-  // Size class bars
-  const total = Math.max(s.small_vessels + s.medium_vessels + s.large_vessels, 1);
-  setText('count-small', s.small_vessels);
-  setText('count-medium', s.medium_vessels);
-  setText('count-large', s.large_vessels);
-  document.getElementById('bar-small').style.width = (s.small_vessels / total * 100) + '%';
-  document.getElementById('bar-medium').style.width = (s.medium_vessels / total * 100) + '%';
-  document.getElementById('bar-large').style.width = (s.large_vessels / total * 100) + '%';
+  animateValue('dark-count',s.dark_vessels);
+  setText('sar-dims',s.sar_image_width+' x '+s.sar_image_height);
+  animateValue('total-pixels',s.total_pixels);
+  animateValue('cfar-dets',s.cfar_detections);
+  animateValue('ais-recs',s.ais_records);
+  animateValue('matched-count',s.matched);
+  animateValue('dark-count-2',s.dark_vessels);
+  animateValue('ais-only-count',s.ais_only);
+  setText('backend',s.compute_backend||'Unknown');
+  setText('gpu-ms',s.gpu_processing_ms.toFixed(1)+' ms');
+  setText('total-ms',s.total_processing_ms.toFixed(1)+' ms');
+  setText('pl-sar',(s.total_pixels).toLocaleString()+' px');
+  setText('pl-cfar',s.cfar_detections+' hits');
+  setText('pl-join',(s.matched+s.dark_vessels+s.ais_only)+' vessels');
+  setText('pl-results',s.dark_vessels+' dark');
+  const total=Math.max(s.small_vessels+s.medium_vessels+s.large_vessels,1);
+  setText('count-small',s.small_vessels);setText('count-medium',s.medium_vessels);setText('count-large',s.large_vessels);
+  document.getElementById('bar-small').style.width=(s.small_vessels/total*100)+'%';
+  document.getElementById('bar-medium').style.width=(s.medium_vessels/total*100)+'%';
+  document.getElementById('bar-large').style.width=(s.large_vessels/total*100)+'%';
 }
+function setText(id,t){document.getElementById(id).textContent=t;}
+function animateValue(id,target){const el=document.getElementById(id);const start=parseInt(el.textContent)||0;const diff=target-start;const dur=600,st=performance.now();function tick(now){const p=Math.min((now-st)/dur,1);el.textContent=Math.round(start+diff*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
 
-function setText(id, text) { document.getElementById(id).textContent = text; }
-function animateValue(id, target) {
-  const el = document.getElementById(id);
-  const start = parseInt(el.textContent) || 0;
-  const diff = target - start;
-  const duration = 600, startTime = performance.now();
-  function tick(now) {
-    const progress = Math.min((now - startTime) / duration, 1);
-    el.textContent = Math.round(start + diff * (1 - Math.pow(1 - progress, 3))).toLocaleString();
-    if (progress < 1) requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-}
-
-document.getElementById('region-select').addEventListener('change', runDetection);
+document.getElementById('region-select').addEventListener('change',e=>{if(e.target.value!=='custom')runDetection();});
 </script>
 </body>
 </html>

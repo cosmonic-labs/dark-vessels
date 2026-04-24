@@ -77,7 +77,7 @@ fn run_cfar(
 
 fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult, String> {
     let start = wstd::time::Instant::now();
-    let bbox = get_region_bbox(&request.region);
+    let bbox = request.custom_bbox.clone().unwrap_or_else(|| get_region_bbox(&request.region));
     let cfar_params = CfarParams::default();
 
     // Generate synthetic SAR image

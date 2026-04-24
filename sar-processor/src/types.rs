@@ -145,6 +145,15 @@ pub struct DetectionRequest {
     pub num_targets: u32,
     #[serde(default = "default_seed")]
     pub seed: u64,
+    /// Custom bounding box (overrides region if provided)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_bbox: Option<BoundingBox>,
+    /// Copernicus CDSE access token (for real SAR data)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cdse_token: Option<String>,
+    /// AISHub API key (for real AIS data)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aishub_key: Option<String>,
 }
 
 fn default_region() -> String {
@@ -171,6 +180,9 @@ impl Default for DetectionRequest {
             sar_height: default_sar_height(),
             num_targets: default_num_targets(),
             seed: default_seed(),
+            custom_bbox: None,
+            cdse_token: None,
+            aishub_key: None,
         }
     }
 }
