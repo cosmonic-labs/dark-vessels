@@ -1,13 +1,14 @@
 version: 2.0.0
 
 build:
-  command: cargo build --workspace --target wasm32-wasip2 --release
+  command: cargo build --workspace --target wasm32-wasip2 --release --features gpu
   component_path: target/wasm32-wasip2/release/api_gateway.wasm
 
 dev:
   components:
     - name: sar-processor
       file: target/wasm32-wasip2/release/sar_processor.wasm
+  wasi_webgpu: true
 
 new:
   command: cargo fetch

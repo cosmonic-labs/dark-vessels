@@ -1,4 +1,4 @@
-use crate::types::{BoundingBox, CfarParams, SarDetection};
+use crate::types::CfarParams;
 use crate::wasi::webgpu::webgpu;
 
 /// Run the CA-CFAR ship detection algorithm on the GPU via wasi:webgpu.
@@ -171,90 +171,6 @@ pub fn run_cfar_gpu(
     staging_buffer.unmap().map_err(|e| format!("unmap error: {:?}", e.kind))?;
 
     Ok(result)
-}
-
-/// Extract ship detections from the binary mask using connected component labeling.
-/// Converts pixel coordinates to lat/lon using the bounding box.
-pub fn extract_detections(
-    mask: &[u32],
-    width: u32,
-    height: u32,
-    bbox: &BoundingBox,
-    sar_image: &[f32],
-) -> Vec<SarDetection> {
-    let mut visited = vec![false; mask.len()];
-    let mut detections = Vec::new();
-
-    for y in 0..height {
-        for x in 0..width {
-            let idx = (y * width + x) as usize;
-            if mask[idx] == 0 || visited[idx] {
-                continue;
-            }
-
-            // Flood-fill to find connected component
-            let mut stack = vec![(x, y)];
-            let mut pixels: Vec<(u32, u32)> = Vec::new();
-            let mut max_intensity: f32 = 0.0;
-
-            while let Some((px, py)) = stack.pop() {
-                let pidx = (py * width + px) as usize;
-                if visited[pidx] || mask[pidx] == 0 {
-                    continue;
-                }
-                visited[pidx] = true;
-                pixels.push((px, py));
-                let intensity = sar_image[pidx];
-                if intensity > max_intensity {
-                    max_intensity = intensity;
-                }
-
-                // 4-connected neighbors
-                if px > 0 { stack.push((px - 1, py)); }
-                if px + 1 < width { stack.push((px + 1, py)); }
-                if py > 0 { stack.push((px, py - 1)); }
-                if py + 1 < height { stack.push((px, py + 1)); }
-            }
-
-            if pixels.is_empty() {
-                continue;
-            }
-
-            // Compute centroid
-            let cx: f64 = pixels.iter().map(|(px, _)| *px as f64).sum::<f64>() / pixels.len() as f64;
-            let cy: f64 = pixels.iter().map(|(_, py)| *py as f64).sum::<f64>() / pixels.len() as f64;
-
-            // Convert pixel to lat/lon
-            let lat = bbox.min_lat + (cy / height as f64) * (bbox.max_lat - bbox.min_lat);
-            let lon = bbox.min_lon + (cx / width as f64) * (bbox.max_lon - bbox.min_lon);
-
-            // Convert intensity to dB
-            let intensity_db = 10.0 * log10_approx(max_intensity);
-
-            // Estimate RCS from intensity and number of pixels
-            let rcs = pixels.len() as f32 * max_intensity * 2.0;
-
-            detections.push(SarDetection {
-                lat,
-                lon,
-                intensity_db,
-                rcs,
-                pixel_x: cx as u32,
-                pixel_y: cy as u32,
-            });
-        }
-    }
-
-    detections
-}
-
-fn log10_approx(x: f32) -> f32 {
-    if x <= 0.0 {
-        return -30.0;
-    }
-    let bits = x.to_bits() as f32;
-    let log2 = bits * 1.1920928955078125e-7 - 126.94269504;
-    log2 * 0.30103 // log10(2)
 }
 
 /// GPU-side CFAR parameters (matches WGSL struct layout with padding)
