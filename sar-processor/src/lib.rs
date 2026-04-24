@@ -102,11 +102,13 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
     );
 
     // Generate synthetic AIS records
+    // Extra AIS-only vessels scale modestly (sqrt) so they don't overwhelm matches at high density
+    let extra_ais = ((num_targets as f64).sqrt() * 2.0).max(3.0).min(30.0) as u32;
     let ais_records = synthetic::generate_ais_records(
         &targets,
         &bbox,
-        (num_targets / 3).max(5),
-        0.2,
+        extra_ais,
+        0.12, // 12% dark vessel ratio — most ships have AIS
         request.seed,
     );
 

@@ -178,9 +178,9 @@ pub fn generate_ais_records(
             continue;
         }
 
-        // Create matching AIS record with small position offset
-        let lat_offset = rng.range_f64(-0.003, 0.003); // ~300m
-        let lon_offset = rng.range_f64(-0.003, 0.003);
+        // Create matching AIS record with small position offset (~100m)
+        let lat_offset = rng.range_f64(-0.001, 0.001);
+        let lon_offset = rng.range_f64(-0.001, 0.001);
 
         let name_idx = rng.range_u32(0, VESSEL_NAMES.len() as u32 - 1) as usize;
         let type_idx = rng.range_u32(0, VESSEL_TYPES.len() as u32 - 1) as usize;

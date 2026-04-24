@@ -108,11 +108,14 @@ The CA-CFAR algorithm runs on every pixel of the SAR image. The GPU compute shad
 
 | SAR Image | Pixels | GPU (WebGPU) | CPU | Speedup |
 |-----------|--------|-------------|-----|---------|
-| 512 x 512 | 262K | **65 ms** | 170 ms | 2.6x |
-| 1024 x 1024 | 1.05M | **78 ms** | 712 ms | **9.1x** |
-| 2048 x 2048 | 4.19M | **238 ms** | 2,914 ms | **12.2x** |
+| 512 x 512 | 262K | **157 ms** | 431 ms | 2.7x |
+| 1024 x 1024 | 1.05M | **242 ms** | 1,223 ms | **5.0x** |
+| 2048 x 2048 | 4.19M | **466 ms** | 6,421 ms | **13.8x** |
+| 4096 x 4096 | 16.8M | **1,918 ms** | 22,716 ms | **11.8x** |
 
-GPU advantage scales with image size. At 2048x2048 (4.2 million pixels), GPU is **12x faster**. Real Sentinel-1 GRD scenes are 25,000 x 16,000 pixels — GPU becomes essential.
+GPU advantage scales with image size. At 4096x4096 (16.8 million pixels), GPU processes in **under 2 seconds** while CPU takes **over 22 seconds**. Real Sentinel-1 GRD scenes are 25,000 x 16,000 pixels (~400 million pixels) — GPU is not optional, it's essential.
+
+The SAR size slider in the UI lets you scale from 512 to 4096 pixels per side. Toggle between GPU and CPU at each size to see the speedup live.
 
 ---
 

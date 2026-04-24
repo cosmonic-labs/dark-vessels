@@ -60,7 +60,7 @@ fn error_response(status: StatusCode, message: &str) -> anyhow::Result<Response<
 /// GET /api/vessels — run detection with default params, return GeoJSON
 async fn get_vessels(_req: Request<Body>) -> anyhow::Result<Response<Body>> {
     let request_body = b"{}";
-    let timeout = Duration::from_secs(30).as_millis() as u32;
+    let timeout = Duration::from_secs(120).as_millis() as u32;
 
     match consumer::request("tasks.sar-processor", request_body, timeout) {
         Ok(resp) => {
@@ -88,7 +88,7 @@ async fn get_vessels(_req: Request<Body>) -> anyhow::Result<Response<Body>> {
 /// POST /api/detect — run detection with custom params
 async fn post_detect(mut req: Request<Body>) -> anyhow::Result<Response<Body>> {
     let body_bytes = req.body_mut().contents().await?.to_vec();
-    let timeout = Duration::from_secs(30).as_millis() as u32;
+    let timeout = Duration::from_secs(120).as_millis() as u32;
 
     match consumer::request("tasks.sar-processor", &body_bytes, timeout) {
         Ok(resp) => {

@@ -286,10 +286,12 @@ input[type=range]::-webkit-slider-thumb {
       <span id="bbox-text"></span>
       <span class="bbox-clear" onclick="clearBbox()">&times; Clear</span>
     </div>
-    <div class="control-row">
+    <div class="density-row">
       <label>SAR Size</label>
-      <select id="size-select"><option value="512">512 x 512</option><option value="1024">1024 x 1024</option><option value="2048">2048 x 2048</option></select>
+      <input type="range" id="sar-size-slider" min="9" max="12" step="1" value="9">
+      <span class="density-val" id="sar-size-val">512</span>
     </div>
+    <div style="font-size:9px;color:#4a5568;text-align:right;margin-top:-4px;margin-bottom:4px;">Sentinel-1 IW: ~25,000 px per side</div>
     <div class="density-row">
       <label>Density</label>
       <input type="range" id="density-slider" min="0.5" max="100" step="0.5" value="3">
@@ -600,7 +602,7 @@ async function runDetection(forceSynthetic) {
   const btn=document.getElementById('run-btn');
   btn.disabled=true;btn.classList.add('loading');btn.textContent='PROCESSING...';
   const region=document.getElementById('region-select').value;
-  const size=parseInt(document.getElementById('size-select').value);
+  const size=Math.pow(2, parseInt(document.getElementById('sar-size-slider').value));
   const seed=Math.floor(Math.random()*100000);
   const density = parseFloat(document.getElementById('density-slider').value);
   const body={region,sar_width:size,sar_height:size,num_targets:0,seed,density,force_cpu:!useGpu};
@@ -671,6 +673,13 @@ function toggleCompute() {
 const densitySlider = document.getElementById('density-slider');
 densitySlider.addEventListener('input', () => {
   document.getElementById('density-val').textContent = densitySlider.value + 'x';
+});
+
+// SAR size slider label (powers of 2: 2^9=512 to 2^14=16384)
+const sarSlider = document.getElementById('sar-size-slider');
+const SAR_LABELS = {9:'512',10:'1,024',11:'2,048',12:'4,096',13:'8,192',14:'16,384'};
+sarSlider.addEventListener('input', () => {
+  document.getElementById('sar-size-val').textContent = SAR_LABELS[sarSlider.value] || Math.pow(2,sarSlider.value);
 });
 
 // --- Location search (Nominatim geocoder) ---
