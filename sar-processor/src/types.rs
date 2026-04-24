@@ -157,6 +157,9 @@ pub struct DetectionRequest {
     /// AISHub API key (for real AIS data)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aishub_key: Option<String>,
+    /// Density multiplier for synthetic data (1.0 = normal, 5.0 = very dense)
+    #[serde(default)]
+    pub density: Option<f32>,
 }
 
 fn default_region() -> String {
@@ -186,6 +189,7 @@ impl Default for DetectionRequest {
             custom_bbox: None,
             cdse_token: None,
             aishub_key: None,
+            density: None,
         }
     }
 }

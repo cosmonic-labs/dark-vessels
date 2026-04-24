@@ -81,11 +81,21 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
     let bbox = request.custom_bbox.clone().unwrap_or_else(|| get_region_bbox(&request.region));
     let cfar_params = CfarParams::default();
 
+    // Scale target count based on bounding box area and density multiplier.
+    // Base density: ~15 ships per degree^2 of ocean (busy shipping lane).
+    let lat_span = bbox.max_lat - bbox.min_lat;
+    let lon_span = bbox.max_lon - bbox.min_lon;
+    let area_deg2 = lat_span * lon_span;
+    let base_density = 15.0; // ships per degree^2
+    let density_mult = request.density.unwrap_or(1.0) as f64;
+    let auto_targets = ((area_deg2 * base_density * density_mult) as u32).max(5).min(500);
+    let num_targets = if request.num_targets > 0 { request.num_targets } else { auto_targets };
+
     // Generate synthetic SAR image
     let (sar_image, targets) = synthetic::generate_sar_image(
         request.sar_width,
         request.sar_height,
-        request.num_targets,
+        num_targets,
         &bbox,
         request.seed,
     );
@@ -94,7 +104,7 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
     let ais_records = synthetic::generate_ais_records(
         &targets,
         &bbox,
-        (request.num_targets / 3).max(5),
+        (num_targets / 3).max(5),
         0.2,
         request.seed,
     );

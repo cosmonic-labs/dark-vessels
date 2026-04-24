@@ -120,6 +120,46 @@ button.draw-btn { width: 100%; }
 .ship-rect-container { margin: 10px 0; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 3px; text-align: center; }
 .ship-rect-label { font-size: 9px; color: #6b7280; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
 
+/* Search box */
+#search-box {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 15;
+  width: 420px; max-width: calc(100% - 420px);
+}
+#search-input {
+  width: 100%; padding: 10px 40px 10px 14px; font-family: inherit; font-size: 13px;
+  background: rgba(10, 14, 23, 0.92); border: 1px solid rgba(255,255,255,0.2);
+  color: #e2e8f0; border-radius: 4px; outline: none; backdrop-filter: blur(10px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+#search-input:focus { border-color: rgba(0, 255, 136, 0.5); box-shadow: 0 0 15px rgba(0, 255, 136, 0.1); }
+#search-input::placeholder { color: #4a5568; }
+#search-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #4a5568; font-size: 16px; pointer-events: none; }
+#search-results {
+  position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+  background: rgba(10, 14, 23, 0.95); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; max-height: 240px; overflow-y: auto; display: none;
+}
+.search-result {
+  padding: 10px 14px; cursor: pointer; font-size: 12px; color: #c0c8d8;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.search-result:hover { background: rgba(0, 255, 136, 0.1); }
+.search-result-name { color: #e2e8f0; }
+.search-result-detail { font-size: 10px; color: #6b7280; margin-top: 2px; }
+
+/* Density slider */
+.density-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.density-row label { font-size: 10px; color: #8892a4; text-transform: uppercase; letter-spacing: 1px; min-width: 60px; }
+input[type=range] {
+  flex: 1; -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.15);
+  border-radius: 2px; outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: #00d4ff; cursor: pointer; border: 2px solid #0a0e17;
+}
+.density-val { font-size: 11px; color: #00d4ff; min-width: 30px; text-align: right; font-weight: bold; }
+
 /* Draw mode crosshair */
 .draw-mode .maplibregl-canvas { cursor: crosshair !important; }
 
@@ -144,6 +184,13 @@ button.draw-btn { width: 100%; }
 </head>
 <body>
 <div id="map"></div>
+
+<!-- Search box -->
+<div id="search-box">
+  <input type="text" id="search-input" placeholder="Search location... (e.g. Strait of Hormuz, Singapore, Suez Canal)" autocomplete="off">
+  <span id="search-icon">&#x1F50D;</span>
+  <div id="search-results"></div>
+</div>
 
 <!-- Draw mode banner -->
 <div id="draw-banner" class="hidden">
@@ -217,6 +264,11 @@ button.draw-btn { width: 100%; }
     <div class="control-row">
       <label>SAR Size</label>
       <select id="size-select"><option value="512">512 x 512</option><option value="1024">1024 x 1024</option><option value="2048">2048 x 2048</option></select>
+    </div>
+    <div class="density-row">
+      <label>Density</label>
+      <input type="range" id="density-slider" min="0.5" max="10" step="0.5" value="3">
+      <span class="density-val" id="density-val">3x</span>
     </div>
     <div class="control-row">
       <label>Units</label>
@@ -524,7 +576,8 @@ async function runDetection(forceSynthetic) {
   const region=document.getElementById('region-select').value;
   const size=parseInt(document.getElementById('size-select').value);
   const seed=Math.floor(Math.random()*100000);
-  const body={region,sar_width:size,sar_height:size,num_targets:Math.floor(size/12),seed};
+  const density = parseFloat(document.getElementById('density-slider').value);
+  const body={region,sar_width:size,sar_height:size,num_targets:0,seed,density};
   if(customBbox&&region==='custom')body.custom_bbox=customBbox;
   // Only attach real data credentials if not forcing synthetic mode
   if(!forceSynthetic) {
@@ -570,6 +623,70 @@ function setText(id,t){document.getElementById(id).textContent=t;}
 function animateValue(id,target){const el=document.getElementById(id);const start=parseInt(el.textContent)||0;const diff=target-start;const dur=600,st=performance.now();function tick(now){const p=Math.min((now-st)/dur,1);el.textContent=Math.round(start+diff*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
 
 document.getElementById('region-select').addEventListener('change',e=>{if(e.target.value!=='custom')runDetection(false);});
+
+// Density slider label
+const densitySlider = document.getElementById('density-slider');
+densitySlider.addEventListener('input', () => {
+  document.getElementById('density-val').textContent = densitySlider.value + 'x';
+});
+
+// --- Location search (Nominatim geocoder) ---
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+let searchTimeout = null;
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  const q = searchInput.value.trim();
+  if (q.length < 2) { searchResults.style.display = 'none'; return; }
+  searchTimeout = setTimeout(() => geocodeSearch(q), 350);
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { searchResults.style.display = 'none'; searchInput.blur(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const first = searchResults.querySelector('.search-result');
+    if (first) first.click();
+    else { const q = searchInput.value.trim(); if (q.length >= 2) geocodeSearch(q); }
+  }
+});
+
+// Click outside closes results
+document.addEventListener('click', e => {
+  if (!e.target.closest('#search-box')) searchResults.style.display = 'none';
+});
+
+async function geocodeSearch(query) {
+  try {
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`);
+    const results = await resp.json();
+    if (!results.length) {
+      searchResults.innerHTML = '<div class="search-result"><span class="search-result-name">No results found</span></div>';
+      searchResults.style.display = 'block';
+      return;
+    }
+    searchResults.innerHTML = results.map(r => {
+      const bbox = r.boundingbox; // [south, north, west, east]
+      return `<div class="search-result" onclick="goToSearchResult(${r.lat},${r.lon},[${bbox}],'${r.display_name.replace(/'/g,"\\'")}')">
+        <div class="search-result-name">${r.display_name.split(',').slice(0,2).join(',')}</div>
+        <div class="search-result-detail">${r.type} &mdash; ${r.display_name}</div>
+      </div>`;
+    }).join('');
+    searchResults.style.display = 'block';
+  } catch (err) { console.error('Geocode failed:', err); }
+}
+
+function goToSearchResult(lat, lon, bbox, name) {
+  searchResults.style.display = 'none';
+  searchInput.value = name;
+  // bbox from Nominatim is [south_lat, north_lat, west_lon, east_lon]
+  if (bbox && bbox[0] !== bbox[1]) {
+    map.fitBounds([[bbox[2], bbox[0]], [bbox[3], bbox[1]]], { padding: 60, duration: 1500, maxZoom: 12 });
+  } else {
+    map.flyTo({ center: [lon, lat], zoom: 10, duration: 1500 });
+  }
+}
 </script>
 </body>
 </html>
