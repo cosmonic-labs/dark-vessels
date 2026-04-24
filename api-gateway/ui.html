@@ -199,65 +199,99 @@ input[type=range]::-webkit-slider-thumb {
 #draw-banner .title { color: #00d4ff; font-size: 13px; letter-spacing: 2px; }
 #draw-banner .subtitle { color: #8892a4; font-size: 11px; margin-top: 4px; }
 
-/* Cosmonic branding */
-#brand {
-  position: absolute; top: 16px; left: 16px; z-index: 10;
-  display: flex; align-items: center; gap: 12px;
-}
+/* Cosmonic branding — logo top-left */
 #brand-logo {
-  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
-  background: rgba(10, 14, 23, 0.88); border: 1px solid rgba(101, 93, 198, 0.3);
+  position: absolute; top: 16px; left: 16px; z-index: 10;
+  padding: 8px 14px;
+  background: rgba(10, 14, 23, 0.85); border: 1px solid rgba(101, 93, 198, 0.25);
   border-radius: 6px; backdrop-filter: blur(10px);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.3), 0 0 20px rgba(101, 93, 198, 0.08);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.3);
 }
-#brand-icon {
-  width: 32px; height: 32px; flex-shrink: 0; position: relative;
-}
-#brand-icon svg { width: 100%; height: 100%; }
-#brand-icon .hex-outline { fill: #655dc6; transition: fill 0.3s; }
-#brand-icon .sparkle { fill: #0a0e17; }
-#brand-wordmark { height: 22px; opacity: 0.85; }
+#brand-logo img { height: 24px; display: block; opacity: 0.9; }
 
-/* Spinner ring around the icon during processing */
-#brand-spinner {
-  position: absolute; top: -5px; left: -5px; width: 42px; height: 42px;
-  border: 2px solid transparent; border-top-color: #655dc6; border-right-color: #655dc6;
-  border-radius: 50%; opacity: 0; transition: opacity 0.3s;
-  pointer-events: none;
+/* Processing overlay — centered C icon */
+#processing-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 25; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.4s ease;
 }
-#brand-spinner.active {
-  opacity: 1;
-  animation: brand-spin 0.8s linear infinite;
+#processing-overlay.active { opacity: 1; }
+#processing-icon {
+  width: 80px; height: 80px; position: relative;
+  filter: drop-shadow(0 0 30px rgba(101, 93, 198, 0.6));
 }
-@keyframes brand-spin { to { transform: rotate(360deg); } }
+#processing-icon svg { width: 100%; height: 100%; }
+#processing-icon .hex-path { fill: #655dc6; }
 
-/* Sparkle pulse when processing */
-#brand-icon.processing .hex-outline { fill: #7b73e0; }
-#brand-icon.processing .sparkle {
-  animation: sparkle-pulse 1.2s ease-in-out infinite;
+/* Spinning ring */
+#processing-ring {
+  position: absolute; top: -12px; left: -12px; width: 104px; height: 104px;
+  border-radius: 50%; border: 2px solid transparent;
+  border-top-color: #8b83e8; border-right-color: #655dc6;
+  animation: proc-spin 1s linear infinite;
 }
-@keyframes sparkle-pulse {
-  0%, 100% { fill: #0a0e17; }
-  50% { fill: rgba(101, 93, 198, 0.25); }
+@keyframes proc-spin { to { transform: rotate(360deg); } }
+
+/* Outer glow ring */
+#processing-glow {
+  position: absolute; top: -20px; left: -20px; width: 120px; height: 120px;
+  border-radius: 50%; border: 1px solid rgba(101, 93, 198, 0.2);
+  animation: proc-glow 2s ease-in-out infinite;
+}
+@keyframes proc-glow {
+  0%, 100% { transform: scale(1); opacity: 0.3; border-color: rgba(101, 93, 198, 0.15); }
+  50% { transform: scale(1.08); opacity: 0.7; border-color: rgba(139, 131, 232, 0.4); }
+}
+
+/* Sparkle particles */
+.sparkle-particle {
+  position: absolute; width: 4px; height: 4px; border-radius: 50%;
+  background: #a59cff; pointer-events: none;
+}
+.sparkle-particle:nth-child(1) { top: -6px; left: 38px; animation: sparkle-float 1.8s ease-in-out infinite 0s; }
+.sparkle-particle:nth-child(2) { top: 38px; right: -8px; animation: sparkle-float 1.8s ease-in-out infinite 0.3s; }
+.sparkle-particle:nth-child(3) { bottom: -6px; left: 30px; animation: sparkle-float 1.8s ease-in-out infinite 0.6s; }
+.sparkle-particle:nth-child(4) { top: 30px; left: -8px; animation: sparkle-float 1.8s ease-in-out infinite 0.9s; }
+.sparkle-particle:nth-child(5) { top: 8px; right: 2px; animation: sparkle-float 1.8s ease-in-out infinite 1.2s; }
+.sparkle-particle:nth-child(6) { bottom: 8px; right: 8px; animation: sparkle-float 1.8s ease-in-out infinite 1.5s; }
+@keyframes sparkle-float {
+  0%, 100% { opacity: 0; transform: scale(0.5) translateY(0); }
+  30% { opacity: 1; transform: scale(1.2) translateY(-6px); }
+  70% { opacity: 0.6; transform: scale(0.8) translateY(4px); }
+}
+
+/* Processing label */
+#processing-label {
+  position: absolute; bottom: -36px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; letter-spacing: 3px; color: #8b83e8; white-space: nowrap;
+  text-shadow: 0 0 10px rgba(101, 93, 198, 0.5);
 }
 </style>
 </head>
 <body>
 <div id="map"></div>
 
-<!-- Cosmonic branding -->
-<div id="brand">
-  <div id="brand-logo">
-    <div id="brand-icon">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.97 93.65">
-        <!-- Hex outline -->
-        <path class="hex-outline" d="M82,41.41V27.12a7.41,7.41,0,0,0-3.67-6.41L44.72,1a7.4,7.4,0,0,0-7.47,0L3.67,20.71A7.45,7.45,0,0,0,0,27.13V66.56A7.43,7.43,0,0,0,3.68,73L37.26,92.64a7.36,7.36,0,0,0,7.45,0L78.3,73A7.45,7.45,0,0,0,82,66.56V52.26a2.08,2.08,0,0,0-2.11-2.08C51,50.73,46.63,59.36,42.84,72A2.06,2.06,0,0,1,38.92,72.16c-4.7-12.57-10.87-18.69-23.5-23.39a2.08,2.08,0,0,1,0-3.9c12.63-4.69,18.8-10.82,23.5-23.39a2.06,2.06,0,0,1,3.92.12c3.8,12.69,8.19,21.32,37,21.87A2.07,2.07,0,0,0,82,41.41Z"/>
-        <!-- Sparkle (inner star shape - separate for animation) -->
-        <path class="sparkle" d="M38.92,72.16c-4.7-12.57-10.87-18.69-23.5-23.39a2.08,2.08,0,0,1,0-3.9c12.63-4.69,18.8-10.82,23.5-23.39a2.06,2.06,0,0,1,3.92.12c3.8,12.69,8.19,21.32,37,21.87A2.07,2.07,0,0,0,82,41.41V41.41a2.07,2.07,0,0,0-2.11-2.08C51,50.73,46.63,59.36,42.84,72A2.06,2.06,0,0,1,38.92,72.16Z" style="fill:#655dc6;opacity:0.3;"/>
-      </svg>
-      <div id="brand-spinner"></div>
-    </div>
-    <img id="brand-wordmark" src="/logo.png" alt="Cosmonic">
+<!-- Cosmonic logo — top left -->
+<div id="brand-logo">
+  <img src="/logo.png" alt="Cosmonic">
+</div>
+
+<!-- Processing overlay — centered C icon with sparkles -->
+<div id="processing-overlay">
+  <div id="processing-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.97 93.65">
+      <path class="hex-path" d="M38.92,72.16c-4.7-12.57-10.87-18.69-23.5-23.39a2.08,2.08,0,0,1,0-3.9c12.63-4.69,18.8-10.82,23.5-23.39a2.06,2.06,0,0,1,3.92.12c3.8,12.69,8.19,21.32,37,21.87A2.07,2.07,0,0,0,82,41.41V27.12a7.41,7.41,0,0,0-3.67-6.41L44.72,1a7.4,7.4,0,0,0-7.47,0L3.67,20.71A7.45,7.45,0,0,0,0,27.13V66.56A7.43,7.43,0,0,0,3.68,73L37.26,92.64a7.36,7.36,0,0,0,7.45,0L78.3,73A7.45,7.45,0,0,0,82,66.56V52.26a2.08,2.08,0,0,0-2.11-2.08C51,50.73,46.63,59.36,42.84,72A2.06,2.06,0,0,1,38.92,72.16Z"/>
+    </svg>
+    <div id="processing-ring"></div>
+    <div id="processing-glow"></div>
+    <div class="sparkle-particle"></div>
+    <div class="sparkle-particle"></div>
+    <div class="sparkle-particle"></div>
+    <div class="sparkle-particle"></div>
+    <div class="sparkle-particle"></div>
+    <div class="sparkle-particle"></div>
+    <div id="processing-label">PROCESSING</div>
   </div>
 </div>
 
@@ -659,8 +693,7 @@ function dr(l,v){return `<div class="popup-detail-row"><span class="popup-detail
 async function runDetection(forceSynthetic) {
   const btn=document.getElementById('run-btn');
   btn.disabled=true;btn.classList.add('loading');btn.textContent='PROCESSING...';
-  document.getElementById('brand-icon').classList.add('processing');
-  document.getElementById('brand-spinner').classList.add('active');
+  document.getElementById('processing-overlay').classList.add('active');
   const region=document.getElementById('region-select').value;
   const size=Math.pow(2, parseInt(document.getElementById('sar-size-slider').value));
   const seed=Math.floor(Math.random()*100000);
@@ -684,8 +717,7 @@ async function runDetection(forceSynthetic) {
   }catch(err){console.error('Detection failed:',err);}
   finally{
     btn.disabled=false;btn.classList.remove('loading');btn.textContent='RUN DETECTION';
-    document.getElementById('brand-icon').classList.remove('processing');
-    document.getElementById('brand-spinner').classList.remove('active');
+    document.getElementById('processing-overlay').classList.remove('active');
   }
 }
 
