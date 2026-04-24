@@ -4,6 +4,9 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+pub mod types;
+pub mod synthetic;
+
 use crate::wasmcloud::messaging::types::BrokerMessage;
 use wasmcloud::messaging::consumer;
 #[allow(unused)]
