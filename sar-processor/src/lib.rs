@@ -64,9 +64,10 @@ fn run_cfar(
     width: u32,
     height: u32,
     params: &CfarParams,
+    force_cpu: bool,
 ) -> (Vec<u32>, bool) {
     #[cfg(feature = "gpu")]
-    {
+    if !force_cpu {
         match gpu::run_cfar_gpu(sar_image, width, height, params) {
             Ok(mask) => return (mask, true),
             Err(_) => {}
@@ -116,6 +117,7 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
         request.sar_width,
         request.sar_height,
         &cfar_params,
+        request.force_cpu,
     );
     let cfar_elapsed = cfar_start.elapsed();
 

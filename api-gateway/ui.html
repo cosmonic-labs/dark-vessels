@@ -160,6 +160,24 @@ input[type=range]::-webkit-slider-thumb {
 }
 .density-val { font-size: 11px; color: #00d4ff; min-width: 30px; text-align: right; font-weight: bold; }
 
+/* Compute toggle switch */
+.compute-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.compute-toggle-label { font-size: 10px; color: #8892a4; text-transform: uppercase; letter-spacing: 1px; transition: color 0.3s; }
+.compute-toggle-label.active { color: #e2e8f0; font-weight: bold; }
+.compute-toggle-label.cpu.active { color: #ffaa00; }
+.compute-toggle-label.gpu.active { color: #00ff88; text-shadow: 0 0 8px rgba(0, 255, 136, 0.4); }
+.toggle-track {
+  width: 44px; height: 22px; border-radius: 11px; cursor: pointer; position: relative;
+  background: rgba(255, 170, 0, 0.3); border: 1px solid rgba(255, 170, 0, 0.5);
+  transition: all 0.3s;
+}
+.toggle-track.gpu { background: rgba(0, 255, 136, 0.3); border-color: rgba(0, 255, 136, 0.5); }
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #ffaa00; transition: all 0.3s; box-shadow: 0 0 6px rgba(255, 170, 0, 0.5);
+}
+.toggle-track.gpu .toggle-thumb { left: 24px; background: #00ff88; box-shadow: 0 0 6px rgba(0, 255, 136, 0.5); }
+
 /* Draw mode crosshair */
 .draw-mode .maplibregl-canvas { cursor: crosshair !important; }
 
@@ -219,6 +237,13 @@ input[type=range]::-webkit-slider-thumb {
   <div class="size-bar-row"><span class="size-bar-label">Large</span><div class="size-bar-track"><div class="size-bar-fill large" id="bar-large" style="width:0%"></div></div><span class="size-bar-count" id="count-large">0</span><span class="size-bar-dims">&gt;200m</span></div>
 
   <div class="section-label">Performance</div>
+  <div class="compute-toggle">
+    <span class="compute-toggle-label cpu" id="cpu-label">CPU</span>
+    <div class="toggle-track gpu" id="compute-toggle" onclick="toggleCompute()">
+      <div class="toggle-thumb"></div>
+    </div>
+    <span class="compute-toggle-label gpu active" id="gpu-label">WebGPU</span>
+  </div>
   <div class="stat-row"><span class="stat-label">Compute Backend</span><span class="stat-value cyan" id="backend">--</span></div>
   <div class="stat-row"><span class="stat-label">CFAR Processing</span><span class="stat-value cyan" id="gpu-ms">--</span></div>
   <div class="stat-row"><span class="stat-label">Total Pipeline</span><span class="stat-value" id="total-ms">--</span></div>
@@ -379,6 +404,7 @@ const SHIP_SVGS = {
 const REGION_CENTERS = { strait_of_hormuz: {center:[56,25.8],zoom:7.5}, persian_gulf: {center:[51.5,27],zoom:6.5}, gulf_of_oman: {center:[58.5,24.5],zoom:7}, bab_el_mandeb: {center:[43.3,12.6],zoom:8} };
 
 let map, currentData = null, customBbox = null, drawState = null;
+let useGpu = true;
 const M_TO_FT = 3.28084;
 
 // --- Cookie helpers ---
@@ -577,7 +603,7 @@ async function runDetection(forceSynthetic) {
   const size=parseInt(document.getElementById('size-select').value);
   const seed=Math.floor(Math.random()*100000);
   const density = parseFloat(document.getElementById('density-slider').value);
-  const body={region,sar_width:size,sar_height:size,num_targets:0,seed,density};
+  const body={region,sar_width:size,sar_height:size,num_targets:0,seed,density,force_cpu:!useGpu};
   if(customBbox&&region==='custom')body.custom_bbox=customBbox;
   // Only attach real data credentials if not forcing synthetic mode
   if(!forceSynthetic) {
@@ -623,6 +649,23 @@ function setText(id,t){document.getElementById(id).textContent=t;}
 function animateValue(id,target){const el=document.getElementById(id);const start=parseInt(el.textContent)||0;const diff=target-start;const dur=600,st=performance.now();function tick(now){const p=Math.min((now-st)/dur,1);el.textContent=Math.round(start+diff*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
 
 document.getElementById('region-select').addEventListener('change',e=>{if(e.target.value!=='custom')runDetection(false);});
+
+// Compute toggle
+function toggleCompute() {
+  useGpu = !useGpu;
+  const track = document.getElementById('compute-toggle');
+  const cpuLabel = document.getElementById('cpu-label');
+  const gpuLabel = document.getElementById('gpu-label');
+  if (useGpu) {
+    track.classList.add('gpu');
+    gpuLabel.classList.add('active');
+    cpuLabel.classList.remove('active');
+  } else {
+    track.classList.remove('gpu');
+    cpuLabel.classList.add('active');
+    gpuLabel.classList.remove('active');
+  }
+}
 
 // Density slider label
 const densitySlider = document.getElementById('density-slider');

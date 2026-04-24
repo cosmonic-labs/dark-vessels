@@ -160,6 +160,9 @@ pub struct DetectionRequest {
     /// Density multiplier for synthetic data (1.0 = normal, 5.0 = very dense)
     #[serde(default)]
     pub density: Option<f32>,
+    /// Force CPU processing even when GPU is available
+    #[serde(default)]
+    pub force_cpu: bool,
 }
 
 fn default_region() -> String {
@@ -190,6 +193,7 @@ impl Default for DetectionRequest {
             cdse_token: None,
             aishub_key: None,
             density: None,
+            force_cpu: false,
         }
     }
 }
