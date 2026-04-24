@@ -222,7 +222,9 @@ button.draw-btn { width: 100%; }
       <label>Units</label>
       <select id="units-select"><option value="feet" selected>Feet</option><option value="meters">Meters</option></select>
     </div>
-    <button class="primary" id="run-btn" onclick="runDetection()">RUN DETECTION</button>
+    <button class="primary" id="run-btn" onclick="runDetection(false)" style="width:100%">RUN DETECTION</button>
+    <button class="secondary" onclick="runDetection(true)" style="width:100%">Test with Synthetic Data</button>
+    <button class="info-btn" onclick="showModal('gpu-info')" style="width:100%;border-radius:2px;height:auto;padding:5px;font-size:10px;letter-spacing:1px;">? HOW DOES THE GPU PIPELINE WORK</button>
   </div>
   <div class="powered-by">POWERED BY <span>wasmCloud 2.0</span> + <span>WebGPU</span> + <span>WASI</span></div>
 </div>
@@ -292,6 +294,24 @@ button.draw-btn { width: 100%; }
       <button class="secondary" onclick="hideModals()">Cancel</button>
       <button class="primary" onclick="saveAisKey()">Save Key</button>
     </div>
+  </div>
+</div>
+
+<div id="modal-gpu-info" class="modal-overlay hidden" onclick="if(event.target===this)hideModals()">
+  <div class="modal">
+    <h3>GPU Compute Pipeline</h3>
+    <p>This system uses <strong>server-side WebGPU</strong> via the WASI WebGPU interface to run signal processing on the GPU. Here's how the pipeline works:</p>
+    <ol class="steps">
+      <li><strong>SAR Image Input</strong> &mdash; A Sentinel-1 radar intensity image (or synthetic equivalent) is loaded as a 2D array of floating-point values</li>
+      <li><strong>GPU Buffer Upload</strong> &mdash; The image data is written to GPU storage buffers via <code>wasi:webgpu</code></li>
+      <li><strong>WGSL Compute Shader</strong> &mdash; A CA-CFAR (Cell-Averaging Constant False Alarm Rate) shader runs on the GPU with 16&times;16 workgroups. Each thread evaluates one pixel against its surrounding clutter level</li>
+      <li><strong>Result Readback</strong> &mdash; Detection mask is copied back from GPU to CPU memory</li>
+      <li><strong>Post-processing</strong> &mdash; Connected component labeling groups detected pixels into ship objects with estimated dimensions</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>When is the GPU used?</strong></p>
+    <p>The GPU processes the CFAR algorithm on <em>both</em> synthetic and real SAR data &mdash; the compute shader operates on the pixel intensity array regardless of source. With real Sentinel-1 GRD images (25,000+ &times; 16,000+ pixels), GPU acceleration becomes essential. A 512&times;512 demo image processes in ~300ms on CPU; a full satellite scene would be 2,500&times; larger.</p>
+    <p style="margin-top:8px;">The GPU path activates when the wasmCloud host is started with <code style="color:#00ff88;">--wasi-webgpu</code>. Without it, processing falls back to CPU automatically.</p>
+    <div class="modal-actions"><button class="primary" onclick="hideModals()">Got it</button></div>
   </div>
 </div>
 
@@ -498,7 +518,7 @@ function showPopup(coords,p) {
 }
 function dr(l,v){return `<div class="popup-detail-row"><span class="popup-detail-label">${l}</span><span class="popup-detail-value">${v}</span></div>`;}
 
-async function runDetection() {
+async function runDetection(forceSynthetic) {
   const btn=document.getElementById('run-btn');
   btn.disabled=true;btn.classList.add('loading');btn.textContent='PROCESSING...';
   const region=document.getElementById('region-select').value;
@@ -506,9 +526,11 @@ async function runDetection() {
   const seed=Math.floor(Math.random()*100000);
   const body={region,sar_width:size,sar_height:size,num_targets:Math.floor(size/12),seed};
   if(customBbox&&region==='custom')body.custom_bbox=customBbox;
-  // Attach credentials from cookies
-  const cdse=getCookie('cdse_creds'); if(cdse){try{const c=JSON.parse(cdse);body.cdse_token=c.username+':'+c.password;}catch(e){}}
-  const ais=getCookie('aishub_key'); if(ais)body.aishub_key=ais;
+  // Only attach real data credentials if not forcing synthetic mode
+  if(!forceSynthetic) {
+    const cdse=getCookie('cdse_creds'); if(cdse){try{const c=JSON.parse(cdse);body.cdse_token=c.username+':'+c.password;}catch(e){}}
+    const ais=getCookie('aishub_key'); if(ais)body.aishub_key=ais;
+  }
   try {
     const resp=await fetch('/api/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
@@ -547,7 +569,7 @@ function updateStats(s) {
 function setText(id,t){document.getElementById(id).textContent=t;}
 function animateValue(id,target){const el=document.getElementById(id);const start=parseInt(el.textContent)||0;const diff=target-start;const dur=600,st=performance.now();function tick(now){const p=Math.min((now-st)/dur,1);el.textContent=Math.round(start+diff*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
 
-document.getElementById('region-select').addEventListener('change',e=>{if(e.target.value!=='custom')runDetection();});
+document.getElementById('region-select').addEventListener('change',e=>{if(e.target.value!=='custom')runDetection(false);});
 </script>
 </body>
 </html>
