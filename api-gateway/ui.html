@@ -1,12 +1,507 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dark Vessels // Maritime Surveillance</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DARK VESSELS // Maritime Surveillance</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+@font-face { font-family: 'Mono'; src: local('SF Mono'), local('Menlo'), local('Consolas'); }
+body { font-family: 'Mono', monospace; background: #0a0e17; color: #c0c8d8; overflow: hidden; }
+#map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+/* Stats Panel */
+#stats-panel {
+  position: absolute; top: 16px; right: 16px; width: 380px;
+  background: rgba(10, 14, 23, 0.92); border: 1px solid rgba(0, 255, 136, 0.25);
+  border-radius: 4px; padding: 20px; z-index: 10;
+  box-shadow: 0 0 30px rgba(0, 255, 136, 0.08), inset 0 0 60px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+#stats-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #00ff88, transparent);
+  animation: scanline 3s linear infinite;
+}
+@keyframes scanline {
+  0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; }
+}
+.panel-title {
+  font-size: 14px; letter-spacing: 3px; color: #00ff88; margin-bottom: 16px;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+.panel-subtitle { font-size: 10px; color: #4a5568; letter-spacing: 2px; margin-bottom: 12px; }
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.stat-label { font-size: 11px; color: #8892a4; text-transform: uppercase; letter-spacing: 1px; }
+.stat-value { font-size: 14px; font-weight: bold; color: #e2e8f0; }
+.stat-value.green { color: #00ff88; }
+.stat-value.red { color: #ff2244; text-shadow: 0 0 8px rgba(255, 34, 68, 0.5); }
+.stat-value.amber { color: #ffaa00; }
+.stat-value.cyan { color: #00d4ff; }
+.stat-dark {
+  font-size: 28px; color: #ff2244; text-align: center; padding: 12px 0;
+  text-shadow: 0 0 20px rgba(255, 34, 68, 0.6);
+  animation: pulse-red 2s ease-in-out infinite;
+}
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.7; }
+}
+
+/* Pipeline visualization */
+.pipeline {
+  margin: 12px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 3px;
+  font-size: 10px; color: #4a90d9;
+}
+.pipeline-flow {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  flex-wrap: wrap;
+}
+.pipeline-node {
+  padding: 3px 8px; border: 1px solid rgba(74, 144, 217, 0.4); border-radius: 2px;
+  background: rgba(74, 144, 217, 0.1);
+}
+.pipeline-node.gpu { border-color: #00ff88; color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+.pipeline-arrow { color: #4a5568; }
+.pipeline-count { font-size: 9px; color: #8892a4; display: block; text-align: center; }
+
+/* Controls */
+.controls { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.control-row { display: flex; gap: 8px; align-items: center; }
+.control-row label { font-size: 10px; color: #8892a4; text-transform: uppercase; letter-spacing: 1px; min-width: 60px; }
+select, button {
+  font-family: inherit; font-size: 11px; background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.15); color: #c0c8d8; padding: 6px 10px;
+  border-radius: 2px; cursor: pointer;
+}
+select { flex: 1; }
+button.primary {
+  background: rgba(0, 255, 136, 0.15); border-color: rgba(0, 255, 136, 0.4);
+  color: #00ff88; letter-spacing: 1px; text-transform: uppercase; font-weight: bold;
+  transition: all 0.2s;
+}
+button.primary:hover { background: rgba(0, 255, 136, 0.25); box-shadow: 0 0 15px rgba(0, 255, 136, 0.2); }
+button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary.loading { animation: pulse-btn 1s ease-in-out infinite; }
+@keyframes pulse-btn { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Powered by badge */
+.powered-by {
+  margin-top: 12px; font-size: 9px; color: #4a5568; text-align: center;
+  letter-spacing: 1px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;
+}
+.powered-by span { color: #00d4ff; }
+
+/* Map popup */
+.maplibregl-popup-content {
+  background: rgba(10, 14, 23, 0.95) !important; border: 1px solid rgba(0, 255, 136, 0.3) !important;
+  border-radius: 4px !important; padding: 0 !important; color: #c0c8d8 !important;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5) !important; min-width: 280px;
+}
+.maplibregl-popup-tip { border-top-color: rgba(10, 14, 23, 0.95) !important; }
+.popup-card { padding: 14px; }
+.popup-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.popup-ship-img { width: 80px; height: 45px; }
+.popup-ship-img svg { width: 100%; height: 100%; }
+.popup-title { flex: 1; }
+.popup-name { font-size: 13px; font-weight: bold; color: #e2e8f0; }
+.popup-mmsi { font-size: 10px; color: #8892a4; }
+.popup-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 2px; font-size: 9px;
+  text-transform: uppercase; letter-spacing: 1px; font-weight: bold;
+}
+.popup-badge.matched { background: rgba(0, 255, 136, 0.2); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.4); }
+.popup-badge.dark_vessel { background: rgba(255, 34, 68, 0.2); color: #ff2244; border: 1px solid rgba(255, 34, 68, 0.4); }
+.popup-badge.ais_only { background: rgba(255, 170, 0, 0.2); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.4); }
+.popup-warning {
+  background: rgba(255, 34, 68, 0.15); border: 1px solid rgba(255, 34, 68, 0.4);
+  color: #ff2244; text-align: center; padding: 6px; font-size: 11px;
+  letter-spacing: 2px; font-weight: bold; margin: 8px 0;
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+.popup-details { font-size: 11px; }
+.popup-detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.popup-detail-label { color: #8892a4; }
+.popup-detail-value { color: #e2e8f0; }
+
+/* Legend */
+#legend {
+  position: absolute; bottom: 30px; left: 16px; z-index: 10;
+  background: rgba(10, 14, 23, 0.9); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px; padding: 12px 16px; font-size: 11px;
+}
+.legend-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+.legend-dot.green { background: #00ff88; box-shadow: 0 0 6px rgba(0, 255, 136, 0.5); }
+.legend-dot.red { background: #ff2244; box-shadow: 0 0 6px rgba(255, 34, 68, 0.5); animation: pulse-dot 2s ease-in-out infinite; }
+.legend-dot.amber { background: transparent; border: 2px solid #ffaa00; box-shadow: 0 0 6px rgba(255, 170, 0, 0.3); }
+@keyframes pulse-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
+</style>
 </head>
 <body>
-    <h1>Dark Vessels - Maritime Surveillance System</h1>
-    <p>wasmCloud 2.0 + WebGPU</p>
+<div id="map"></div>
+
+<div id="stats-panel">
+  <div class="panel-title">DARK VESSELS</div>
+  <div class="panel-subtitle">MARITIME SURVEILLANCE SYSTEM</div>
+
+  <div class="stat-dark" id="dark-count">--</div>
+  <div style="text-align:center;font-size:10px;color:#8892a4;letter-spacing:2px;margin-bottom:12px;">UNIDENTIFIED VESSELS</div>
+
+  <div class="stat-row"><span class="stat-label">SAR Image</span><span class="stat-value cyan" id="sar-dims">--</span></div>
+  <div class="stat-row"><span class="stat-label">Pixels Processed</span><span class="stat-value" id="total-pixels">--</span></div>
+  <div class="stat-row"><span class="stat-label">GPU CFAR Detections</span><span class="stat-value" id="cfar-dets">--</span></div>
+  <div class="stat-row"><span class="stat-label">AIS Records</span><span class="stat-value" id="ais-recs">--</span></div>
+  <div class="stat-row"><span class="stat-label">Matched</span><span class="stat-value green" id="matched-count">--</span></div>
+  <div class="stat-row"><span class="stat-label">Dark Vessels</span><span class="stat-value red" id="dark-count-2">--</span></div>
+  <div class="stat-row"><span class="stat-label">AIS Anomalies</span><span class="stat-value amber" id="ais-only-count">--</span></div>
+  <div class="stat-row"><span class="stat-label">GPU Processing</span><span class="stat-value cyan" id="gpu-ms">--</span></div>
+  <div class="stat-row"><span class="stat-label">Total Pipeline</span><span class="stat-value" id="total-ms">--</span></div>
+
+  <div class="pipeline">
+    <div class="pipeline-flow">
+      <div class="pipeline-node">SAR Image<span class="pipeline-count" id="pl-sar">--</span></div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-node gpu">GPU CFAR<span class="pipeline-count" id="pl-cfar">--</span></div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-node">Spatial Join<span class="pipeline-count" id="pl-join">--</span></div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-node">Results<span class="pipeline-count" id="pl-results">--</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="control-row">
+      <label>Region</label>
+      <select id="region-select">
+        <option value="strait_of_hormuz" selected>Strait of Hormuz</option>
+        <option value="persian_gulf">Persian Gulf</option>
+        <option value="gulf_of_oman">Gulf of Oman</option>
+        <option value="bab_el_mandeb">Bab el-Mandeb</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <label>SAR Size</label>
+      <select id="size-select">
+        <option value="512">512 x 512</option>
+        <option value="1024">1024 x 1024</option>
+        <option value="2048">2048 x 2048</option>
+      </select>
+    </div>
+    <button class="primary" id="run-btn" onclick="runDetection()">RUN DETECTION</button>
+  </div>
+
+  <div class="powered-by">
+    POWERED BY <span>wasmCloud 2.0</span> + <span>WebGPU</span> + <span>WASI</span>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="legend-item"><div class="legend-dot green"></div> AIS Matched</div>
+  <div class="legend-item"><div class="legend-dot red"></div> Dark Vessel (No AIS)</div>
+  <div class="legend-item"><div class="legend-dot amber"></div> AIS Only (No Radar)</div>
+</div>
+
+<script>
+// Ship silhouette SVGs by vessel type
+const SHIP_SVGS = {
+  tanker: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 35 L15 40 L105 40 L115 35 L110 30 L100 28 L95 20 L90 18 L85 20 L80 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/>
+    <rect x="25" y="20" width="50" height="8" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="85" y="12" width="8" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="89" y1="6" x2="89" y2="12" stroke="#4a90d9" stroke-width="1"/>
+  </svg>`,
+  cargo: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/>
+    <rect x="25" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="42" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="59" y="15" width="15" height="13" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="85" y="12" width="12" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="91" y1="5" x2="91" y2="12" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="35" y1="10" x2="35" y2="15" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="33" y1="10" x2="37" y2="10" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="67" y1="10" x2="67" y2="15" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="65" y1="10" x2="69" y2="10" stroke="#4a90d9" stroke-width="1"/>
+  </svg>`,
+  container: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 35 L15 40 L105 40 L115 35 L110 28 L20 28 L15 30 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/>
+    <rect x="22" y="18" width="60" height="10" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="25" y="10" width="54" height="8" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="37" y1="10" x2="37" y2="28" stroke="#4a90d9" stroke-width="0.5"/>
+    <line x1="52" y1="10" x2="52" y2="28" stroke="#4a90d9" stroke-width="0.5"/>
+    <line x1="67" y1="10" x2="67" y2="28" stroke="#4a90d9" stroke-width="0.5"/>
+    <rect x="90" y="12" width="10" height="16" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="95" y1="5" x2="95" y2="12" stroke="#4a90d9" stroke-width="1"/>
+  </svg>`,
+  fishing: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M20 35 L30 40 L90 40 L100 35 L95 30 L30 30 L25 32 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/>
+    <rect x="65" y="18" width="10" height="12" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="70" y1="8" x2="70" y2="18" stroke="#4a90d9" stroke-width="1.5"/>
+    <line x1="70" y1="8" x2="45" y2="16" stroke="#4a90d9" stroke-width="0.7"/>
+    <line x1="70" y1="8" x2="88" y2="16" stroke="#4a90d9" stroke-width="0.7"/>
+    <line x1="45" y1="16" x2="45" y2="30" stroke="#4a90d9" stroke-width="0.5" stroke-dasharray="2,2"/>
+  </svg>`,
+  military: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 33 L10 38 L110 38 L118 33 L115 30 L100 27 L90 25 L80 27 L70 25 L20 25 L10 28 Z" fill="none" stroke="#4a90d9" stroke-width="1.5"/>
+    <rect x="55" y="15" width="15" height="10" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <line x1="62" y1="8" x2="62" y2="15" stroke="#4a90d9" stroke-width="1.5"/>
+    <circle cx="62" cy="8" r="2" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <path d="M30 25 L35 18 L45 18 L50 25" fill="none" stroke="#4a90d9" stroke-width="1"/>
+    <rect x="80" y="20" width="18" height="5" rx="1" fill="none" stroke="#4a90d9" stroke-width="1"/>
+  </svg>`,
+  unknown: `<svg viewBox="0 0 120 50" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15 35 L25 40 L95 40 L105 35 L100 28 L25 28 L20 30 Z" fill="none" stroke="#ff2244" stroke-width="1.5"/>
+    <text x="60" y="24" text-anchor="middle" font-size="16" fill="#ff2244" font-family="monospace">?</text>
+  </svg>`
+};
+
+const REGION_CENTERS = {
+  strait_of_hormuz: { center: [56.0, 25.8], zoom: 7.5 },
+  persian_gulf:     { center: [51.5, 27.0], zoom: 6.5 },
+  gulf_of_oman:     { center: [58.5, 24.5], zoom: 7 },
+  bab_el_mandeb:    { center: [43.3, 12.6], zoom: 8 },
+};
+
+let map, currentData = null;
+
+// Init map
+map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      'osm-tiles': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap'
+      }
+    },
+    layers: [{
+      id: 'osm-layer',
+      type: 'raster',
+      source: 'osm-tiles',
+      paint: {
+        'raster-saturation': -0.8,
+        'raster-brightness-max': 0.35,
+        'raster-contrast': 0.3
+      }
+    }]
+  },
+  center: [56.0, 25.8],
+  zoom: 7.5,
+  maxZoom: 14,
+  minZoom: 3
+});
+
+map.on('load', () => {
+  // Empty GeoJSON source
+  map.addSource('vessels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+  // Matched vessels (green)
+  map.addLayer({
+    id: 'vessels-matched', type: 'circle', source: 'vessels',
+    filter: ['==', ['get', 'status'], 'matched'],
+    paint: {
+      'circle-radius': 7, 'circle-color': '#00ff88',
+      'circle-opacity': 0.85, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#00cc6a'
+    }
+  });
+
+  // Dark vessels (red, pulsing via two layers)
+  map.addLayer({
+    id: 'vessels-dark-glow', type: 'circle', source: 'vessels',
+    filter: ['==', ['get', 'status'], 'dark_vessel'],
+    paint: {
+      'circle-radius': 18, 'circle-color': '#ff2244', 'circle-opacity': 0.15,
+      'circle-stroke-width': 0, 'circle-blur': 1
+    }
+  });
+  map.addLayer({
+    id: 'vessels-dark', type: 'circle', source: 'vessels',
+    filter: ['==', ['get', 'status'], 'dark_vessel'],
+    paint: {
+      'circle-radius': 8, 'circle-color': '#ff2244',
+      'circle-opacity': 0.95, 'circle-stroke-width': 2, 'circle-stroke-color': '#ff4466'
+    }
+  });
+
+  // AIS-only (amber ring)
+  map.addLayer({
+    id: 'vessels-ais-only', type: 'circle', source: 'vessels',
+    filter: ['==', ['get', 'status'], 'ais_only'],
+    paint: {
+      'circle-radius': 7, 'circle-color': 'transparent',
+      'circle-stroke-width': 2.5, 'circle-stroke-color': '#ffaa00', 'circle-stroke-opacity': 0.85
+    }
+  });
+
+  // Hover interactions
+  const interactiveLayers = ['vessels-matched', 'vessels-dark', 'vessels-ais-only'];
+  interactiveLayers.forEach(layer => {
+    map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
+    map.on('click', layer, (e) => {
+      if (!e.features.length) return;
+      const f = e.features[0];
+      const p = f.properties;
+      const coords = f.geometry.coordinates.slice();
+      showPopup(coords, p);
+    });
+  });
+
+  // Animate dark vessel pulse
+  let pulsePhase = 0;
+  function animatePulse() {
+    pulsePhase = (pulsePhase + 0.03) % (2 * Math.PI);
+    const r = 8 + 3 * Math.sin(pulsePhase);
+    const glow = 18 + 6 * Math.sin(pulsePhase);
+    const opacity = 0.1 + 0.08 * Math.sin(pulsePhase);
+    if (map.getLayer('vessels-dark')) {
+      map.setPaintProperty('vessels-dark', 'circle-radius', r);
+    }
+    if (map.getLayer('vessels-dark-glow')) {
+      map.setPaintProperty('vessels-dark-glow', 'circle-radius', glow);
+      map.setPaintProperty('vessels-dark-glow', 'circle-opacity', opacity);
+    }
+    requestAnimationFrame(animatePulse);
+  }
+  animatePulse();
+
+  // Initial load
+  runDetection();
+});
+
+function showPopup(coords, props) {
+  const status = props.status;
+  const vesselType = props.vessel_type || 'unknown';
+  const svg = SHIP_SVGS[vesselType] || SHIP_SVGS.unknown;
+  const isDark = status === 'dark_vessel';
+
+  let html = `<div class="popup-card">`;
+  html += `<div class="popup-header">`;
+  html += `<div class="popup-ship-img">${svg}</div>`;
+  html += `<div class="popup-title">`;
+  if (props.name) {
+    html += `<div class="popup-name">${props.name}</div>`;
+    html += `<div class="popup-mmsi">MMSI: ${props.mmsi}</div>`;
+  } else {
+    html += `<div class="popup-name" style="color:#ff2244">UNKNOWN VESSEL</div>`;
+    html += `<div class="popup-mmsi">NO IDENTIFICATION</div>`;
+  }
+  html += `</div>`;
+  html += `<span class="popup-badge ${status}">${status.replace('_', ' ')}</span>`;
+  html += `</div>`;
+
+  if (isDark) {
+    html += `<div class="popup-warning">&#9888; NO AIS SIGNAL DETECTED</div>`;
+  }
+
+  html += `<div class="popup-details">`;
+  if (props.vessel_type) html += detailRow('Type', props.vessel_type.toUpperCase());
+  if (props.destination) html += detailRow('Destination', props.destination);
+  if (props.heading != null) html += detailRow('Heading', props.heading.toFixed(1) + '&deg;');
+  if (props.speed_knots != null) html += detailRow('Speed', props.speed_knots.toFixed(1) + ' kn');
+  html += detailRow('Position', coords[1].toFixed(4) + ', ' + coords[0].toFixed(4));
+  if (props.intensity_db != null) html += detailRow('Radar Intensity', props.intensity_db.toFixed(1) + ' dB');
+  if (props.rcs != null) html += detailRow('Radar Cross Section', props.rcs.toFixed(1) + ' m&sup2;');
+  html += `</div></div>`;
+
+  new maplibregl.Popup({ closeOnClick: true, maxWidth: '320px' })
+    .setLngLat(coords)
+    .setHTML(html)
+    .addTo(map);
+}
+
+function detailRow(label, value) {
+  return `<div class="popup-detail-row"><span class="popup-detail-label">${label}</span><span class="popup-detail-value">${value}</span></div>`;
+}
+
+async function runDetection() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = 'PROCESSING...';
+
+  const region = document.getElementById('region-select').value;
+  const size = parseInt(document.getElementById('size-select').value);
+  const seed = Math.floor(Math.random() * 100000);
+
+  try {
+    const resp = await fetch('/api/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ region, sar_width: size, sar_height: size, num_targets: Math.floor(size / 12), seed })
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    currentData = data;
+
+    // Update map
+    map.getSource('vessels').setData(data);
+
+    // Fly to region
+    const rc = REGION_CENTERS[region];
+    if (rc) map.flyTo({ center: rc.center, zoom: rc.zoom, duration: 1500 });
+
+    // Update stats with animation
+    updateStats(data.stats);
+  } catch (err) {
+    console.error('Detection failed:', err);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = 'RUN DETECTION';
+  }
+}
+
+function updateStats(s) {
+  animateValue('dark-count', s.dark_vessels);
+  setText('sar-dims', s.sar_image_width + ' x ' + s.sar_image_height);
+  animateValue('total-pixels', s.total_pixels);
+  animateValue('cfar-dets', s.cfar_detections);
+  animateValue('ais-recs', s.ais_records);
+  animateValue('matched-count', s.matched);
+  animateValue('dark-count-2', s.dark_vessels);
+  animateValue('ais-only-count', s.ais_only);
+  setText('gpu-ms', s.gpu_processing_ms.toFixed(1) + ' ms');
+  setText('total-ms', s.total_processing_ms.toFixed(1) + ' ms');
+
+  // Pipeline counts
+  setText('pl-sar', (s.total_pixels).toLocaleString() + ' px');
+  setText('pl-cfar', s.cfar_detections + ' hits');
+  setText('pl-join', (s.matched + s.dark_vessels + s.ais_only) + ' vessels');
+  setText('pl-results', s.dark_vessels + ' dark');
+}
+
+function setText(id, text) {
+  document.getElementById(id).textContent = text;
+}
+
+function animateValue(id, target) {
+  const el = document.getElementById(id);
+  const start = parseInt(el.textContent) || 0;
+  const diff = target - start;
+  const duration = 600;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(start + diff * eased).toLocaleString();
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// Region change auto-detects
+document.getElementById('region-select').addEventListener('change', runDetection);
+</script>
 </body>
 </html>
