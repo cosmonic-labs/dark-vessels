@@ -14,6 +14,7 @@ wit_bindgen::generate!({
 
 pub mod types;
 pub mod synthetic;
+pub mod ocean;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod cfar_cpu;
@@ -213,6 +214,11 @@ fn extract_detections_from_mask(
 
             let lat = bbox.min_lat + (cy / height as f64) * (bbox.max_lat - bbox.min_lat);
             let lon = bbox.min_lon + (cx / width as f64) * (bbox.max_lon - bbox.min_lon);
+
+            // Skip detections over land (real SAR would show land clutter)
+            if !ocean::is_ocean(lat, lon) {
+                continue;
+            }
 
             let intensity_db = 10.0 * log10_approx(max_intensity);
             let rcs = pixels.len() as f32 * max_intensity * 2.0;

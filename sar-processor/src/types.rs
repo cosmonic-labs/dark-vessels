@@ -82,6 +82,9 @@ pub struct AisRecord {
     pub heading: f32,
     pub speed_knots: f32,
     pub destination: String,
+    /// Flagged true if this AIS position is over land (possible spoofing)
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub on_land: bool,
 }
 
 /// Classification of a vessel after spatial join

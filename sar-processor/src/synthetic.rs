@@ -1,3 +1,4 @@
+use crate::ocean;
 use crate::types::{AisRecord, BoundingBox, SarTarget};
 
 /// Simple LCG PRNG (no external deps needed in WASI)
@@ -84,11 +85,24 @@ pub fn generate_sar_image(
         image.push(base);
     }
 
-    // Place ship targets as bright Gaussian blobs
+    // Place ship targets as bright Gaussian blobs (only on water)
     let mut targets = Vec::with_capacity(num_targets as usize);
     for _ in 0..num_targets {
-        let cx = rng.range_u32(20, width - 20);
-        let cy = rng.range_u32(20, height - 20);
+        // Retry until we find a water position (max 20 attempts)
+        let mut cx = 0u32;
+        let mut cy = 0u32;
+        let mut on_water = false;
+        for _ in 0..20 {
+            cx = rng.range_u32(20, width - 20);
+            cy = rng.range_u32(20, height - 20);
+            let lat = bbox.min_lat + (cy as f64 / height as f64) * (bbox.max_lat - bbox.min_lat);
+            let lon = bbox.min_lon + (cx as f64 / width as f64) * (bbox.max_lon - bbox.min_lon);
+            if ocean::is_ocean(lat, lon) {
+                on_water = true;
+                break;
+            }
+        }
+        if !on_water { continue; }
         // Ship intensity: 3 to 10x above clutter mean (~0.14)
         let ship_intensity = rng.range_f32(1.5, 8.0);
         // Vary blob size to create small/medium/large vessels
@@ -182,26 +196,39 @@ pub fn generate_ais_records(
             heading: rng.range_f32(0.0, 360.0),
             speed_knots: rng.range_f32(0.5, 18.0),
             destination: DESTINATIONS[dest_idx].into(),
+            on_land: false,
         });
     }
 
-    // Add extra AIS-only vessels (no SAR detection)
+    // Add extra AIS-only vessels (no SAR detection, water only)
     for _ in 0..extra_ais_count {
-        let name_idx = rng.range_u32(0, VESSEL_NAMES.len() as u32 - 1) as usize;
-        let type_idx = rng.range_u32(0, VESSEL_TYPES.len() as u32 - 1) as usize;
-        let dest_idx = rng.range_u32(0, DESTINATIONS.len() as u32 - 1) as usize;
-        let mmsi = rng.range_u32(200000000, 799999999);
-
-        records.push(AisRecord {
-            mmsi,
-            name: VESSEL_NAMES[name_idx].into(),
-            vessel_type: VESSEL_TYPES[type_idx].into(),
-            lat: rng.range_f64(bbox.min_lat, bbox.max_lat),
-            lon: rng.range_f64(bbox.min_lon, bbox.max_lon),
-            heading: rng.range_f32(0.0, 360.0),
-            speed_knots: rng.range_f32(0.5, 12.0),
-            destination: DESTINATIONS[dest_idx].into(),
-        });
+        let mut lat;
+        let mut lon;
+        let mut found = false;
+        for _ in 0..20 {
+            lat = rng.range_f64(bbox.min_lat, bbox.max_lat);
+            lon = rng.range_f64(bbox.min_lon, bbox.max_lon);
+            if ocean::is_ocean(lat, lon) {
+                found = true;
+                let name_idx = rng.range_u32(0, VESSEL_NAMES.len() as u32 - 1) as usize;
+                let type_idx = rng.range_u32(0, VESSEL_TYPES.len() as u32 - 1) as usize;
+                let dest_idx = rng.range_u32(0, DESTINATIONS.len() as u32 - 1) as usize;
+                let mmsi = rng.range_u32(200000000, 799999999);
+                records.push(AisRecord {
+                    mmsi,
+                    name: VESSEL_NAMES[name_idx].into(),
+                    vessel_type: VESSEL_TYPES[type_idx].into(),
+                    lat,
+                    lon,
+                    heading: rng.range_f32(0.0, 360.0),
+                    speed_knots: rng.range_f32(0.5, 12.0),
+                    destination: DESTINATIONS[dest_idx].into(),
+                    on_land: false,
+                });
+                break;
+            }
+        }
+        if !found { continue; }
     }
 
     records
