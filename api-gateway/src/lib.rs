@@ -13,15 +13,26 @@ use wstd::http::{Body, Request, Response, StatusCode};
 use wstd::time::Duration;
 
 static UI_HTML: &str = include_str!("../ui.html");
+static LOGO_PNG: &[u8] = include_bytes!("../../icons/Cosmonic.Logo-Hrztl_Color.png");
 
 #[wstd::http_server]
 async fn main(req: Request<Body>) -> anyhow::Result<Response<Body>> {
     match (req.method().as_str(), req.uri().path()) {
         (_, "/") => serve_html(),
+        ("GET", "/logo.png") => serve_logo(),
         ("GET", "/api/vessels") => get_vessels(req).await,
         ("POST", "/api/detect") => post_detect(req).await,
         _ => not_found(),
     }
+}
+
+fn serve_logo() -> anyhow::Result<Response<Body>> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "image/png")
+        .header("Cache-Control", "public, max-age=86400")
+        .body(LOGO_PNG.to_vec().into())
+        .map_err(Into::into)
 }
 
 fn serve_html() -> anyhow::Result<Response<Body>> {
