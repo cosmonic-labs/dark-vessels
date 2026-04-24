@@ -89,7 +89,7 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
     let area_deg2 = lat_span * lon_span;
     let base_density = 15.0; // ships per degree^2
     let density_mult = request.density.unwrap_or(1.0) as f64;
-    let auto_targets = ((area_deg2 * base_density * density_mult) as u32).max(5).min(500);
+    let auto_targets = ((area_deg2 * base_density * density_mult) as u32).max(5).min(5000);
     let num_targets = if request.num_targets > 0 { request.num_targets } else { auto_targets };
 
     // Generate synthetic SAR image
