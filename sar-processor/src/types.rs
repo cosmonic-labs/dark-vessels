@@ -29,6 +29,46 @@ pub struct SarDetection {
     pub rcs: f32,
     pub pixel_x: u32,
     pub pixel_y: u32,
+    /// Estimated ship length in meters (from SAR pixel extent)
+    pub length_m: f32,
+    /// Estimated ship beam (width) in meters
+    pub beam_m: f32,
+    /// Number of detected pixels in the connected component
+    pub pixel_count: u32,
+    /// Size classification based on SAR dimensions
+    pub size_class: SizeClass,
+}
+
+/// Ship size classification derived from SAR dimensions
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SizeClass {
+    /// < 50m length (fishing boats, dhows, small craft)
+    Small,
+    /// 50-200m length (cargo, tankers, ferries)
+    Medium,
+    /// > 200m length (VLCCs, container mega-ships, military capital ships)
+    Large,
+}
+
+impl SizeClass {
+    pub fn from_length_m(length: f32) -> Self {
+        if length < 50.0 {
+            SizeClass::Small
+        } else if length < 200.0 {
+            SizeClass::Medium
+        } else {
+            SizeClass::Large
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            SizeClass::Small => "Small",
+            SizeClass::Medium => "Medium",
+            SizeClass::Large => "Large",
+        }
+    }
 }
 
 /// An AIS telemetry record
@@ -80,6 +120,9 @@ pub struct ProcessingStats {
     pub total_processing_ms: f64,
     pub region: String,
     pub compute_backend: String,
+    pub small_vessels: u32,
+    pub medium_vessels: u32,
+    pub large_vessels: u32,
 }
 
 /// Full detection result returned by the processor

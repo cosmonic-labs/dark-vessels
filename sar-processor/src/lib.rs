@@ -126,6 +126,11 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
     let dark_vessels = vessels.iter().filter(|v| matches!(v.status, VesselStatus::DarkVessel)).count() as u32;
     let ais_only = vessels.iter().filter(|v| matches!(v.status, VesselStatus::AisOnly)).count() as u32;
 
+    // Count by size class (only vessels with SAR data)
+    let small_vessels = vessels.iter().filter(|v| v.sar.as_ref().is_some_and(|s| matches!(s.size_class, types::SizeClass::Small))).count() as u32;
+    let medium_vessels = vessels.iter().filter(|v| v.sar.as_ref().is_some_and(|s| matches!(s.size_class, types::SizeClass::Medium))).count() as u32;
+    let large_vessels = vessels.iter().filter(|v| v.sar.as_ref().is_some_and(|s| matches!(s.size_class, types::SizeClass::Large))).count() as u32;
+
     let stats = ProcessingStats {
         sar_image_width: request.sar_width,
         sar_image_height: request.sar_height,
@@ -139,12 +144,16 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
         total_processing_ms: total_elapsed.as_millis() as f64,
         region: request.region.clone(),
         compute_backend: if used_gpu { "WebGPU".into() } else { "CPU".into() },
+        small_vessels,
+        medium_vessels,
+        large_vessels,
     };
 
     Ok(DetectionResult { vessels, stats })
 }
 
 /// Extract ship detections from the binary mask using connected component labeling.
+/// Computes ship dimensions from pixel bounding box + SAR spatial resolution.
 fn extract_detections_from_mask(
     mask: &[u32],
     width: u32,
@@ -154,6 +163,11 @@ fn extract_detections_from_mask(
 ) -> Vec<types::SarDetection> {
     let mut visited = vec![false; mask.len()];
     let mut detections = Vec::new();
+
+    // Sentinel-1 GRD pixel spacing is ~10m. Use this as the SAR resolution
+    // for computing physical ship dimensions, regardless of how we map
+    // pixels to the bounding box for geographic placement.
+    let sar_resolution_m: f64 = 10.0;
 
     for y in 0..height {
         for x in 0..width {
@@ -165,6 +179,8 @@ fn extract_detections_from_mask(
             let mut stack = vec![(x, y)];
             let mut pixels: Vec<(u32, u32)> = Vec::new();
             let mut max_intensity: f32 = 0.0;
+            let mut min_px = x; let mut max_px = x;
+            let mut min_py = y; let mut max_py = y;
 
             while let Some((px, py)) = stack.pop() {
                 let pidx = (py * width + px) as usize;
@@ -177,6 +193,10 @@ fn extract_detections_from_mask(
                 if intensity > max_intensity {
                     max_intensity = intensity;
                 }
+                if px < min_px { min_px = px; }
+                if px > max_px { max_px = px; }
+                if py < min_py { min_py = py; }
+                if py > max_py { max_py = py; }
 
                 if px > 0 { stack.push((px - 1, py)); }
                 if px + 1 < width { stack.push((px + 1, py)); }
@@ -197,6 +217,16 @@ fn extract_detections_from_mask(
             let intensity_db = 10.0 * log10_approx(max_intensity);
             let rcs = pixels.len() as f32 * max_intensity * 2.0;
 
+            // Compute physical dimensions using SAR pixel resolution
+            let extent_px_x = (max_px - min_px + 1) as f64;
+            let extent_px_y = (max_py - min_py + 1) as f64;
+            // Length = major axis, beam = minor axis
+            let dim_x_m = (extent_px_x * sar_resolution_m) as f32;
+            let dim_y_m = (extent_px_y * sar_resolution_m) as f32;
+            let length_m = dim_x_m.max(dim_y_m);
+            let beam_m = dim_x_m.min(dim_y_m);
+            let size_class = types::SizeClass::from_length_m(length_m);
+
             detections.push(types::SarDetection {
                 lat,
                 lon,
@@ -204,6 +234,10 @@ fn extract_detections_from_mask(
                 rcs,
                 pixel_x: cx as u32,
                 pixel_y: cy as u32,
+                length_m,
+                beam_m,
+                pixel_count: pixels.len() as u32,
+                size_class,
             });
         }
     }

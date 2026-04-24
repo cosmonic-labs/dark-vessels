@@ -91,19 +91,36 @@ pub fn generate_sar_image(
         let cy = rng.range_u32(20, height - 20);
         // Ship intensity: 3 to 10x above clutter mean (~0.14)
         let ship_intensity = rng.range_f32(1.5, 8.0);
-        let blob_radius = rng.range_u32(2, 4);
+        // Vary blob size to create small/medium/large vessels
+        // At 10m/pixel: radius 1-2 = small (<50m), 3-5 = medium, 6-12 = large (>200m)
+        let size_roll = rng.next_f32();
+        let (blob_radius_x, blob_radius_y) = if size_roll < 0.35 {
+            // Small vessel (fishing, dhow): ~20-40m
+            (rng.range_u32(1, 2), rng.range_u32(1, 1))
+        } else if size_roll < 0.75 {
+            // Medium vessel (cargo, small tanker): ~60-180m
+            let len = rng.range_u32(3, 9);
+            (len, rng.range_u32(1, len / 3 + 1))
+        } else {
+            // Large vessel (VLCC, container): ~200-350m
+            let len = rng.range_u32(10, 17);
+            (len, rng.range_u32(2, len / 4 + 1))
+        };
         let rcs = rng.range_f32(10.0, 500.0); // Radar cross section m^2
 
-        // Draw Gaussian blob
-        let r = blob_radius as i32;
-        for dy in -r..=r {
-            for dx in -r..=r {
+        // Draw elliptical Gaussian blob (elongated for ship shape)
+        let rx = blob_radius_x as i32;
+        let ry = blob_radius_y as i32;
+        let sigma_x = blob_radius_x as f32 * 0.6;
+        let sigma_y = blob_radius_y as f32 * 0.6;
+        for dy in -ry..=ry {
+            for dx in -rx..=rx {
                 let px = cx as i32 + dx;
                 let py = cy as i32 + dy;
                 if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
-                    let dist_sq = (dx * dx + dy * dy) as f32;
-                    let sigma = blob_radius as f32 * 0.6;
-                    let weight = f32::exp(-dist_sq / (2.0 * sigma * sigma));
+                    let nx = dx as f32 / sigma_x;
+                    let ny = dy as f32 / sigma_y;
+                    let weight = f32::exp(-0.5 * (nx * nx + ny * ny));
                     let idx = py as usize * width as usize + px as usize;
                     image[idx] += ship_intensity * weight;
                 }

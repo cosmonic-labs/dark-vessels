@@ -145,6 +145,10 @@ struct SarDetection {
     rcs: f32,
     pixel_x: u32,
     pixel_y: u32,
+    length_m: f32,
+    beam_m: f32,
+    pixel_count: u32,
+    size_class: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -173,6 +177,9 @@ struct ProcessingStats {
     total_processing_ms: f64,
     region: String,
     compute_backend: String,
+    small_vessels: u32,
+    medium_vessels: u32,
+    large_vessels: u32,
 }
 
 // --- GeoJSON conversion ---
@@ -219,6 +226,14 @@ struct GeoJsonProperties {
     intensity_db: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rcs: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    length_m: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    beam_m: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pixel_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_class: Option<String>,
 }
 
 fn to_geojson(result: &DetectionResult) -> GeoJsonResponse {
@@ -248,6 +263,10 @@ fn to_geojson(result: &DetectionResult) -> GeoJsonResponse {
                     destination: v.ais.as_ref().map(|a| a.destination.clone()),
                     intensity_db: v.sar.as_ref().map(|s| s.intensity_db),
                     rcs: v.sar.as_ref().map(|s| s.rcs),
+                    length_m: v.sar.as_ref().map(|s| s.length_m),
+                    beam_m: v.sar.as_ref().map(|s| s.beam_m),
+                    pixel_count: v.sar.as_ref().map(|s| s.pixel_count),
+                    size_class: v.sar.as_ref().map(|s| s.size_class.clone()),
                 },
             }
         })
@@ -269,6 +288,9 @@ fn to_geojson(result: &DetectionResult) -> GeoJsonResponse {
             total_processing_ms: result.stats.total_processing_ms,
             region: result.stats.region.clone(),
             compute_backend: result.stats.compute_backend.clone(),
+            small_vessels: result.stats.small_vessels,
+            medium_vessels: result.stats.medium_vessels,
+            large_vessels: result.stats.large_vessels,
         },
     }
 }
