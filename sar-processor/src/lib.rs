@@ -7,6 +7,7 @@ wit_bindgen::generate!({
 pub mod types;
 pub mod synthetic;
 pub mod gpu;
+pub mod spatial_join;
 
 use crate::wasmcloud::messaging::types::BrokerMessage;
 use wasmcloud::messaging::consumer;
