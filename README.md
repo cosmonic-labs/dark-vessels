@@ -12,6 +12,23 @@ This project demonstrates that **real signal processing workloads can run inside
 
 ---
 
+### Demonstration
+![Dark Vessels — server-side GPU based SAR image processing with AIS ingration running as Wasm components](dark-vessels-basic-cpu-gpu-demo.gif) 
+
+---
+
+### ToDo
+This demonstration is designed to show the WebAssembly inside of a GPU so data sources are currently mocked up 
+
+- [x] CPU Workflow
+- [x] GPU Workflow
+- [x] Sample data generator
+- [ ] SAR Integration
+- [ ] AIS Integration
+
+
+---
+
 ## Architecture
 
 ```
@@ -27,7 +44,7 @@ This project demonstrates that **real signal processing workloads can run inside
     │  │     handler             │              │     handler             ││
     │  │                         │              │                         ││
     │  │  Imports:               │              │  Imports:               ││
-    │  │   wasmcloud:messaging/  │              │   wasi:webgpu/webgpu   ││
+    │  │   wasmcloud:messaging/  │              │   wasi:webgpu/webgpu    ││
     │  │     consumer            │              │   wasmcloud:messaging/  ││
     │  │                         │              │     consumer            ││
     │  │  ┌───────────────────┐  │              │                         ││
@@ -36,28 +53,28 @@ This project demonstrates that **real signal processing workloads can run inside
     │  │  │  391 KB total     │  │              │  │  Shader (CFAR)    │  ││
     │  │  └───────────────────┘  │              │  └────────┬──────────┘  ││
     │  └─────────┬───────────────┘              │           │             ││
-    │            │                              │     ┌─────▼─────┐      ││
-    │            │ HTTP :8000                    │     │   wgpu    │      ││
-    │            │                              │     │  (Metal/  │      ││
-    │            │                              │     │  Vulkan)  │      ││
-    │            │                              │     └───────────┘      ││
-    │            │                              └──────────────────────────┘│
+    │            │                              │     ┌─────▼─────┐       ││
+    │            │ HTTP :8000                   │     │   wgpu    │       ││
+    │            │                              │     │  (Metal/  │       ││
+    │            │                              │     │  Vulkan)  │       ││
+    │            │                              │     └───────────┘       ││
+    │            │                              └─────────────────────────┘│
     └────────────┼─────────────────────────────────────────────────────────┘
                  │
     ┌────────────▼────────────────────────────────────────────────────────┐
     │                        Browser                                      │
-    │                                                                      │
+    │                                                                     │
     │  ┌──────────────────────────────────────────────────────────────┐   │
     │  │  MapLibre GL JS Map                                          │   │
-    │  │  ┌─────────┐  ┌─────────────┐  ┌─────────────────────────┐  │   │
-    │  │  │ Search   │  │ Draw BBox   │  │  Stats Dashboard        │  │   │
-    │  │  │ (Nominat-│  │ Tool        │  │  GPU/CPU Toggle         │  │   │
-    │  │  │  im API) │  │             │  │  Density Slider         │  │   │
-    │  │  └─────────┘  └─────────────┘  │  Size Classification    │  │   │
-    │  │                                 │  Ship Silhouette Popups │  │   │
-    │  │  ● Green = AIS Matched          │  SAR Radar Footprint    │  │   │
-    │  │  ● Red (pulse) = Dark Vessel    │  Feet/Meters Toggle     │  │   │
-    │  │  ○ Amber = AIS Only             └─────────────────────────┘  │   │
+    │  │  ┌─────────┐  ┌─────────────┐  ┌──────────────────────────┐  │   │
+    │  │  │ Search   │  │ Draw BBox   │ │  Stats Dashboard         │  │   │
+    │  │  │ (Nominat-│  │ Tool        │ │  GPU/CPU Toggle          │  │   │
+    │  │  │  im API) │  │             │ │  Density Slider          │  │   │
+    │  │  └─────────┘  └─────────────┘  │  Size Classification     │  │   │
+    │  │                                │  Ship Silhouette Popups  │  │   │
+    │  │  ● Green = AIS Matched         │  SAR Radar Footprint     │  │   │
+    │  │  ● Red (pulse) = Dark Vessel   │  Feet/Meters Toggle      │  │   │
+    │  │  ○ Amber = AIS Only            └──────────────────────────┘  │   │
     │  └──────────────────────────────────────────────────────────────┘   │
     └─────────────────────────────────────────────────────────────────────┘
 
@@ -65,15 +82,15 @@ This project demonstrates that **real signal processing workloads can run inside
     ┌─────────────────────┐    ┌──────────────────┐
     │  Copernicus CDSE    │    │  AISHub API      │
     │  (Sentinel-1 SAR)   │    │  (AIS Telemetry) │
-    │  dataspace.          │    │  aishub.net      │
+    │  dataspace.         │    │  aishub.net      │
     │   copernicus.eu     │    │                  │
     └─────────────────────┘    └──────────────────┘
 
     Geocoding:
     ┌─────────────────────┐
-    │  OpenStreetMap       │
-    │  Nominatim           │
-    │  (Location Search)   │
+    │  OpenStreetMap      │
+    │  Nominatim          │
+    │  (Location Search)  │
     └─────────────────────┘
 ```
 
@@ -85,14 +102,14 @@ This project demonstrates that **real signal processing workloads can run inside
   Synthetic Generator          GPU / CPU               Spatial Join
   (or Copernicus CDSE)         (wasi:webgpu)           (Haversine)
                                                      
-  ┌──────────────┐     ┌──────────────────┐     ┌────────────────────┐
+  ┌───────────────┐     ┌──────────────────┐     ┌────────────────────┐
   │ SAR Intensity │────►│  CA-CFAR Compute │────►│  Match SAR ↔ AIS   │
   │ Image (f32[]) │     │  Shader (WGSL)   │     │  within 500m       │
-  │               │     │  16×16 workgroups │     │                    │
+  │               │     │  16×16 workgroups│     │                    │
   │ + AIS Records │     │                  │     │  Classify:         │
   │   (synthetic  │     │  Detection mask  │     │  ● Matched         │
   │    or AISHub) │     │  → CCL → Ships   │     │  ● Dark Vessel     │
-  └──────────────┘     │  with dimensions  │     │  ● AIS Only        │
+  └───────────────┘     │  with dimensions │     │  ● AIS Only        │
                         └──────────────────┘     └────────┬───────────┘
                                                           │
                                                           ▼
