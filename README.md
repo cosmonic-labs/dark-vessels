@@ -12,6 +12,11 @@ This project demonstrates that **real signal processing workloads can run inside
 
 ---
 
+## NOTE: Constraints
+This repo is a light weight proof of concept that uses synthetic data to simplify a concept, is architectural simplified, and has not been secured for production. Please see [CONSTRAINTS.md](CONSTRAINTS.md) for a list of opportunities to make this project more architecturally sound, secure, and correct.
+
+---
+
 ### Demonstration
 ![Dark Vessels — server-side GPU based SAR image processing with AIS ingration running as Wasm components](dark-vessels-basic-cpu-gpu-demo.gif) 
 

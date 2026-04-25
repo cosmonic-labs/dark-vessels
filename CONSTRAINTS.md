@@ -45,6 +45,7 @@ This document outlines the architectural bottlenecks, scalability limits, and sc
 - **Constraint**: Processing $4096 \times 4096$ tiles involves large `f32` and `u32` arrays (64MB+ per buffer).
 - **Impact**: Serializing large results into GeoJSON strings inside the `api-gateway` can lead to memory exhaustion and high latency.
 - **Recommendation**: Move to a tiled processing approach or binary serialization (e.g., Protobuf/FlatBuffers).
+- **Note**: Wasm memory can easily be tuned
 
 ### Trig Approximations
 - **Constraint**: Uses Bhaskara I polynomial approximations for trigonometric functions.
