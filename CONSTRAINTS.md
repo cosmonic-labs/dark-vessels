@@ -4,7 +4,7 @@ This document outlines the architectural bottlenecks, scalability limits, and sc
 
 ## 1. High-Level Architecture & Scalability
 
-### GPU Resource Lifecycle (RESOLVED)
+:white_check_mark: ### GPU Resource Lifecycle (RESOLVED)
 - **Status**: Fixed. `GpuDevice` and `GpuComputePipeline` are now cached in a `OnceLock`.
 - **Impact**: Reduced GPU processing overhead from ~190ms to <1ms per request (initialization overhead is now a one-time cost).
 - **Remaining Recommendation**: None.
