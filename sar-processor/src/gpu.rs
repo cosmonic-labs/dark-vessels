@@ -1,14 +1,23 @@
 use crate::types::CfarParams;
 use crate::wasi::webgpu::webgpu;
+use std::sync::OnceLock;
 
-/// Run the CA-CFAR ship detection algorithm on the GPU via wasi:webgpu.
-/// Returns a detection mask (1 = ship, 0 = clutter) for each pixel.
-pub fn run_cfar_gpu(
-    sar_image: &[f32],
-    width: u32,
-    height: u32,
-    params: &CfarParams,
-) -> Result<Vec<u32>, String> {
+struct GpuResources {
+    device: webgpu::GpuDevice,
+    pipeline: webgpu::GpuComputePipeline,
+}
+
+// SAFETY: WebGPU resource handles in WASI are thread-safe IDs.
+unsafe impl Send for GpuResources {}
+unsafe impl Sync for GpuResources {}
+
+static GPU_RESOURCES: OnceLock<GpuResources> = OnceLock::new();
+
+fn get_gpu_resources() -> Result<&'static GpuResources, String> {
+    if let Some(res) = GPU_RESOURCES.get() {
+        return Ok(res);
+    }
+
     let device = webgpu::get_gpu()
         .request_adapter(None)
         .ok_or("no GPU adapter available")?
@@ -21,6 +30,35 @@ pub fn run_cfar_gpu(
         compilation_hints: None,
         label: Some("cfar_shader".to_string()),
     });
+
+    // Create compute pipeline
+    let pipeline = device.create_compute_pipeline(webgpu::GpuComputePipelineDescriptor {
+        label: Some("cfar_pipeline".to_string()),
+        layout: webgpu::GpuLayoutMode::Auto,
+        compute: webgpu::GpuProgrammableStage {
+            module: &shader_module,
+            entry_point: Some("main".to_string()),
+            constants: None,
+        },
+    });
+
+    let res = GpuResources { device, pipeline };
+    let _ = GPU_RESOURCES.set(res);
+    
+    GPU_RESOURCES.get().ok_or_else(|| "Failed to initialize GPU resources".to_string())
+}
+
+/// Run the CA-CFAR ship detection algorithm on the GPU via wasi:webgpu.
+/// Returns a detection mask (1 = ship, 0 = clutter) for each pixel.
+pub fn run_cfar_gpu(
+    sar_image: &[f32],
+    width: u32,
+    height: u32,
+    params: &CfarParams,
+) -> Result<Vec<u32>, String> {
+    let res = get_gpu_resources()?;
+    let device = &res.device;
+    let pipeline = &res.pipeline;
 
     let image_size_bytes = (sar_image.len() * 4) as u64;
     let detection_size_bytes = (width * height * 4) as u64;
@@ -80,17 +118,6 @@ pub fn run_cfar_gpu(
         usage: webgpu::GpuBufferUsage::map_read()
             | webgpu::GpuBufferUsage::copy_dst(),
         mapped_at_creation: None,
-    });
-
-    // Create compute pipeline
-    let pipeline = device.create_compute_pipeline(webgpu::GpuComputePipelineDescriptor {
-        label: Some("cfar_pipeline".to_string()),
-        layout: webgpu::GpuLayoutMode::Auto,
-        compute: webgpu::GpuProgrammableStage {
-            module: &shader_module,
-            entry_point: Some("main".to_string()),
-            constants: None,
-        },
     });
 
     // Create bind group
