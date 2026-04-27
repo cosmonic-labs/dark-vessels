@@ -37,7 +37,13 @@ impl Rng {
     fn range_u32(&mut self, lo: u32, hi: u32) -> u32 {
         lo + (self.next_u64() % (hi - lo + 1) as u64) as u32
     }
+}
 
+pub struct SarTargetInternal {
+    pub target: SarTarget,
+    pub ship_intensity: f32,
+    pub blob_radius_x: u32,
+    pub blob_radius_y: u32,
 }
 
 const VESSEL_NAMES: &[&str] = &[
@@ -65,8 +71,131 @@ const DESTINATIONS: &[&str] = &[
     "Chabahar, Iran", "Karachi, Pakistan", "Mumbai, India",
 ];
 
-/// Generate a synthetic SAR intensity image with ship targets.
-/// Returns (image_data, placed_targets)
+/// Generate ship targets for the entire requested area.
+pub fn generate_targets(
+    full_width: u32,
+    full_height: u32,
+    num_targets: u32,
+    bbox: &BoundingBox,
+    seed: u64,
+) -> Vec<SarTargetInternal> {
+    let mut rng = Rng::new(seed);
+    let mut targets = Vec::with_capacity(num_targets as usize);
+
+    for _ in 0..num_targets {
+        let mut cx = 0u32;
+        let mut cy = 0u32;
+        let mut on_water = false;
+        for _ in 0..20 {
+            cx = rng.range_u32(20, full_width - 20);
+            cy = rng.range_u32(20, full_height - 20);
+            let lat = bbox.min_lat + (cy as f64 / full_height as f64) * (bbox.max_lat - bbox.min_lat);
+            let lon = bbox.min_lon + (cx as f64 / full_width as f64) * (bbox.max_lon - bbox.min_lon);
+            if ocean::is_ocean(lat, lon) {
+                on_water = true;
+                break;
+            }
+        }
+        if !on_water { continue; }
+
+        let ship_intensity = rng.range_f32(1.5, 8.0);
+        let size_roll = rng.next_f32();
+        let (blob_radius_x, blob_radius_y) = if size_roll < 0.35 {
+            (rng.range_u32(1, 2), rng.range_u32(1, 1))
+        } else if size_roll < 0.75 {
+            let len = rng.range_u32(3, 9);
+            (len, rng.range_u32(1, len / 3 + 1))
+        } else {
+            let len = rng.range_u32(10, 17);
+            (len, rng.range_u32(2, len / 4 + 1))
+        };
+        let rcs = rng.range_f32(10.0, 500.0);
+
+        let lat = bbox.min_lat + (cy as f64 / full_height as f64) * (bbox.max_lat - bbox.min_lat);
+        let lon = bbox.min_lon + (cx as f64 / full_width as f64) * (bbox.max_lon - bbox.min_lon);
+
+        targets.push(SarTargetInternal {
+            target: SarTarget {
+                pixel_x: cx,
+                pixel_y: cy,
+                lat,
+                lon,
+                intensity_db: 10.0 * (ship_intensity.log10()),
+                rcs,
+            },
+            ship_intensity,
+            blob_radius_x,
+            blob_radius_y,
+        });
+    }
+    targets
+}
+
+/// Render a specific tile of the SAR image.
+pub fn render_tile(
+    targets: &[SarTargetInternal],
+    _full_width: u32,
+    _full_height: u32,
+    tile_x: u32,
+    tile_y: u32,
+    tile_width: u32,
+    tile_height: u32,
+    seed: u64,
+) -> Vec<f32> {
+    // Deterministic seed for this tile's background noise
+    let tile_seed = seed.wrapping_add(tile_y as u64 * 0xFFFF).wrapping_add(tile_x as u64);
+    let mut rng = Rng::new(tile_seed);
+    
+    let size = (tile_width * tile_height) as usize;
+    let mut image = Vec::with_capacity(size);
+
+    for _ in 0..size {
+        let base = 0.1 + rng.next_f32() * 0.08;
+        image.push(base);
+    }
+
+    for internal in targets {
+        let t = &internal.target;
+        // Check if target blob could overlap with this tile
+        let margin = internal.blob_radius_x.max(internal.blob_radius_y) as i32;
+        let tx = t.pixel_x as i32;
+        let ty = t.pixel_y as i32;
+        
+        if tx + margin < tile_x as i32 || tx - margin >= (tile_x + tile_width) as i32 ||
+           ty + margin < tile_y as i32 || ty - margin >= (tile_y + tile_height) as i32 {
+            continue;
+        }
+
+        let rx = internal.blob_radius_x as i32;
+        let ry = internal.blob_radius_y as i32;
+        let sigma_x = internal.blob_radius_x as f32 * 0.6;
+        let sigma_y = internal.blob_radius_y as f32 * 0.6;
+        
+        for dy in -ry..=ry {
+            for dx in -rx..=rx {
+                let gx = tx + dx; // Global x
+                let gy = ty + dy; // Global y
+                
+                // If the pixel is within the current tile
+                if gx >= tile_x as i32 && gx < (tile_x + tile_width) as i32 &&
+                   gy >= tile_y as i32 && gy < (tile_y + tile_height) as i32 {
+                    let local_x = (gx - tile_x as i32) as u32;
+                    let local_y = (gy - tile_y as i32) as u32;
+                    
+                    let nx = dx as f32 / sigma_x;
+                    let ny = dy as f32 / sigma_y;
+                    let weight = f32::exp(-0.5 * (nx * nx + ny * ny));
+                    let idx = (local_y * tile_width + local_x) as usize;
+                    image[idx] += internal.ship_intensity * weight;
+                }
+            }
+        }
+    }
+
+    image
+}
+
+/// Legacy wrapper for single-tile generation (if still used)
 pub fn generate_sar_image(
     width: u32,
     height: u32,
@@ -74,93 +203,13 @@ pub fn generate_sar_image(
     bbox: &BoundingBox,
     seed: u64,
 ) -> (Vec<f32>, Vec<SarTarget>) {
-    let mut rng = Rng::new(seed);
-    let size = (width * height) as usize;
-    let mut image = Vec::with_capacity(size);
-
-    // Generate sea clutter background in linear power
-    // Mean clutter ~ 0.1 (about -10 dB), with some variation
-    for _ in 0..size {
-        let base = 0.1 + rng.next_f32() * 0.08; // 0.1 to 0.18 linear
-        image.push(base);
-    }
-
-    // Place ship targets as bright Gaussian blobs (only on water)
-    let mut targets = Vec::with_capacity(num_targets as usize);
-    for _ in 0..num_targets {
-        // Retry until we find a water position (max 20 attempts)
-        let mut cx = 0u32;
-        let mut cy = 0u32;
-        let mut on_water = false;
-        for _ in 0..20 {
-            cx = rng.range_u32(20, width - 20);
-            cy = rng.range_u32(20, height - 20);
-            let lat = bbox.min_lat + (cy as f64 / height as f64) * (bbox.max_lat - bbox.min_lat);
-            let lon = bbox.min_lon + (cx as f64 / width as f64) * (bbox.max_lon - bbox.min_lon);
-            if ocean::is_ocean(lat, lon) {
-                on_water = true;
-                break;
-            }
-        }
-        if !on_water { continue; }
-        // Ship intensity: 3 to 10x above clutter mean (~0.14)
-        let ship_intensity = rng.range_f32(1.5, 8.0);
-        // Vary blob size to create small/medium/large vessels
-        // At 10m/pixel: radius 1-2 = small (<50m), 3-5 = medium, 6-12 = large (>200m)
-        let size_roll = rng.next_f32();
-        let (blob_radius_x, blob_radius_y) = if size_roll < 0.35 {
-            // Small vessel (fishing, dhow): ~20-40m
-            (rng.range_u32(1, 2), rng.range_u32(1, 1))
-        } else if size_roll < 0.75 {
-            // Medium vessel (cargo, small tanker): ~60-180m
-            let len = rng.range_u32(3, 9);
-            (len, rng.range_u32(1, len / 3 + 1))
-        } else {
-            // Large vessel (VLCC, container): ~200-350m
-            let len = rng.range_u32(10, 17);
-            (len, rng.range_u32(2, len / 4 + 1))
-        };
-        let rcs = rng.range_f32(10.0, 500.0); // Radar cross section m^2
-
-        // Draw elliptical Gaussian blob (elongated for ship shape)
-        let rx = blob_radius_x as i32;
-        let ry = blob_radius_y as i32;
-        let sigma_x = blob_radius_x as f32 * 0.6;
-        let sigma_y = blob_radius_y as f32 * 0.6;
-        for dy in -ry..=ry {
-            for dx in -rx..=rx {
-                let px = cx as i32 + dx;
-                let py = cy as i32 + dy;
-                if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
-                    let nx = dx as f32 / sigma_x;
-                    let ny = dy as f32 / sigma_y;
-                    let weight = f32::exp(-0.5 * (nx * nx + ny * ny));
-                    let idx = py as usize * width as usize + px as usize;
-                    image[idx] += ship_intensity * weight;
-                }
-            }
-        }
-
-        // Convert pixel to lat/lon
-        let lat = bbox.min_lat + (cy as f64 / height as f64) * (bbox.max_lat - bbox.min_lat);
-        let lon = bbox.min_lon + (cx as f64 / width as f64) * (bbox.max_lon - bbox.min_lon);
-
-        targets.push(SarTarget {
-            pixel_x: cx,
-            pixel_y: cy,
-            lat,
-            lon,
-            intensity_db: 10.0 * (ship_intensity.log10()),
-            rcs,
-        });
-    }
-
+    let internal_targets = generate_targets(width, height, num_targets, bbox, seed);
+    let image = render_tile(&internal_targets, width, height, 0, 0, width, height, seed);
+    let targets = internal_targets.into_iter().map(|it| it.target).collect();
     (image, targets)
 }
 
 /// Generate synthetic AIS records.
-/// `sar_targets` is used to create matching AIS records for some targets.
-/// Returns AIS records where ~70% match SAR targets, ~30% are AIS-only.
 pub fn generate_ais_records(
     sar_targets: &[SarTarget],
     bbox: &BoundingBox,
@@ -171,14 +220,11 @@ pub fn generate_ais_records(
     let mut rng = Rng::new(seed.wrapping_add(42));
     let mut records = Vec::new();
 
-    // For each SAR target, maybe create a matching AIS record
     for target in sar_targets {
         if rng.next_f32() < dark_vessel_ratio {
-            // This is a dark vessel — no AIS record
             continue;
         }
 
-        // Create matching AIS record with small position offset (~100m)
         let lat_offset = rng.range_f64(-0.001, 0.001);
         let lon_offset = rng.range_f64(-0.001, 0.001);
 
@@ -200,7 +246,6 @@ pub fn generate_ais_records(
         });
     }
 
-    // Add extra AIS-only vessels (no SAR detection, water only)
     for _ in 0..extra_ais_count {
         let mut lat;
         let mut lon;
@@ -233,5 +278,3 @@ pub fn generate_ais_records(
 
     records
 }
-
-
