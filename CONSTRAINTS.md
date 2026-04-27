@@ -4,7 +4,7 @@ This document outlines the architectural bottlenecks, scalability limits, and sc
 
 ## 1. High-Level Architecture & Scalability
 
-### GPU Resource Lifecycle (RESOLVED)
+:white_check_mark: ### GPU Resource Lifecycle (RESOLVED)
 - **Status**: Fixed. `GpuDevice` and `GpuComputePipeline` are now cached in a `OnceLock`.
 - **Impact**: Reduced GPU processing overhead from ~190ms to <1ms per request (initialization overhead is now a one-time cost).
 - **Remaining Recommendation**: None.
@@ -41,7 +41,7 @@ This document outlines the architectural bottlenecks, scalability limits, and sc
 
 ## 3. Wasm & Runtime Constraints
 
-### Memory Pressure (RESOLVED via Tiling)
+:white_check_mark: ### Memory Pressure (RESOLVED via Tiling)
 - **Status**: Fixed. The processing pipeline now uses a tiled approach (2048x2048 tiles).
 - **Impact**: Successfully processed images up to 25,000 x 16,000 pixels (400M pixels) without exceeding Wasm memory limits or WebGPU buffer limits.
 - **Remaining Recommendation**: For even larger datasets, consider streaming results back to the gateway.
