@@ -41,11 +41,10 @@ This document outlines the architectural bottlenecks, scalability limits, and sc
 
 ## 3. Wasm & Runtime Constraints
 
-### Memory Pressure
-- **Constraint**: Processing $4096 \times 4096$ tiles involves large `f32` and `u32` arrays (64MB+ per buffer).
-- **Impact**: Serializing large results into GeoJSON strings inside the `api-gateway` can lead to memory exhaustion and high latency.
-- **Recommendation**: Move to a tiled processing approach or binary serialization (e.g., Protobuf/FlatBuffers).
-- **Note**: Wasm memory can easily be tuned
+:white_check_mark: ### Memory Pressure (RESOLVED via Tiling)
+- **Status**: Fixed. The processing pipeline now uses a tiled approach (2048x2048 tiles).
+- **Impact**: Successfully processed images up to 25,000 x 16,000 pixels (400M pixels) without exceeding Wasm memory limits or WebGPU buffer limits.
+- **Remaining Recommendation**: For even larger datasets, consider streaming results back to the gateway.
 
 ### Trig Approximations
 - **Constraint**: Uses Bhaskara I polynomial approximations for trigonometric functions.

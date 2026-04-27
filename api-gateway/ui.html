@@ -380,7 +380,7 @@ input[type=range]::-webkit-slider-thumb {
     </div>
     <div class="density-row">
       <label>SAR Size</label>
-      <input type="range" id="sar-size-slider" min="9" max="12" step="1" value="9">
+      <input type="range" id="sar-size-slider" min="9" max="15" step="1" value="9">
       <span class="density-val" id="sar-size-val">512</span>
     </div>
     <div style="font-size:9px;color:#4a5568;text-align:right;margin-top:-4px;margin-bottom:4px;">Sentinel-1 IW: ~25,000 px per side</div>
@@ -695,10 +695,11 @@ async function runDetection(forceSynthetic) {
   btn.disabled=true;btn.classList.add('loading');btn.textContent='PROCESSING...';
   document.getElementById('processing-overlay').classList.add('active');
   const region=document.getElementById('region-select').value;
-  const size=Math.pow(2, parseInt(document.getElementById('sar-size-slider').value));
+  const sliderVal = parseInt(document.getElementById('sar-size-slider').value);
+  const dims = getSarDims(sliderVal);
   const seed=Math.floor(Math.random()*100000);
   const density = parseFloat(document.getElementById('density-slider').value);
-  const body={region,sar_width:size,sar_height:size,num_targets:0,seed,density,force_cpu:!useGpu};
+  const body={region,sar_width:dims.w,sar_height:dims.h,num_targets:0,seed,density,force_cpu:!useGpu};
   if(customBbox&&region==='custom')body.custom_bbox=customBbox;
   // Only attach real data credentials if not forcing synthetic mode
   if(!forceSynthetic) {
@@ -771,9 +772,24 @@ densitySlider.addEventListener('input', () => {
   document.getElementById('density-val').textContent = densitySlider.value + 'x';
 });
 
-// SAR size slider label (powers of 2: 2^9=512 to 2^14=16384)
+// SAR size slider label (powers of 2: 2^9=512 to 2^15=25000x16000)
 const sarSlider = document.getElementById('sar-size-slider');
-const SAR_LABELS = {9:'512',10:'1,024',11:'2,048',12:'4,096',13:'8,192',14:'16,384'};
+const SAR_LABELS = {
+  9: '512',
+  10: '1,024',
+  11: '2,048',
+  12: '4,096',
+  13: '8,192',
+  14: '16,384',
+  15: '25,000 x 16,000'
+};
+
+function getSarDims(val) {
+  if (val === 15) return { w: 25000, h: 16000 };
+  const size = Math.pow(2, val);
+  return { w: size, h: size };
+}
+
 sarSlider.addEventListener('input', () => {
   document.getElementById('sar-size-val').textContent = SAR_LABELS[sarSlider.value] || Math.pow(2,sarSlider.value);
 });
