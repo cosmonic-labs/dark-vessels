@@ -165,6 +165,79 @@ The host provides only the interfaces each component declares it needs. A compro
 
 ---
 
+### Principle of Least Authority (POLA)
+
+WebAssembly starts each sandbox with full adherance to the principle of least authority; with zero capabilities. Each capability - network access, file system, system call, etc. but be explicitly granted.  This provides an additional layer of protection against remote code execution, lateral movement, data exfiltraiton, and other security risks:
+
+With the two WebAssembly Components we can see how they the POLA is respected at both the component level and the compisition level - the APIs are linked and decleare both their imports and their exports.
+
+#### api_gateway.wasm
+
+`api_gateway.wasm` Capabilities
+
+Inspecting `wasm-tools component wit ./api_gateway.wasm`
+
+```
+package root:component;
+
+world root {
+  import wasmcloud:messaging/types@0.2.0;
+  import wasmcloud:messaging/consumer@0.2.0;
+  import wasi:io/poll@0.2.9;
+  import wasi:clocks/monotonic-clock@0.2.9;
+  import wasi:io/error@0.2.9;
+  import wasi:io/streams@0.2.9;
+  import wasi:cli/stdout@0.2.9;
+  import wasi:cli/stderr@0.2.9;
+  import wasi:cli/stdin@0.2.9;
+  import wasi:http/types@0.2.9;
+  import wasi:cli/environment@0.2.9;
+  import wasi:cli/exit@0.2.9;
+  import wasi:cli/terminal-input@0.2.9;
+  import wasi:cli/terminal-output@0.2.9;
+  import wasi:cli/terminal-stdin@0.2.9;
+  import wasi:cli/terminal-stdout@0.2.9;
+  import wasi:cli/terminal-stderr@0.2.9;
+  import wasi:random/insecure-seed@0.2.9;
+
+  export wasi:http/incoming-handler@0.2.9;
+}
+```
+
+#### sar_processor.wasm
+
+`sar_processor.wasm` Capabilities
+
+Inspecting `wasm-tools component wit ./sar_processor.wasm`
+
+```
+package root:component;
+
+world root {
+  import wasi:io/poll@0.2.9;
+  import wasi:webgpu/webgpu@0.0.1;
+  import wasmcloud:messaging/types@0.2.0;
+  import wasmcloud:messaging/consumer@0.2.0;
+  import wasi:clocks/monotonic-clock@0.2.9;
+  import wasi:io/error@0.2.9;
+  import wasi:io/streams@0.2.9;
+  import wasi:cli/stdout@0.2.9;
+  import wasi:cli/stderr@0.2.9;
+  import wasi:cli/stdin@0.2.9;
+  import wasi:cli/environment@0.2.9;
+  import wasi:cli/exit@0.2.9;
+  import wasi:cli/terminal-input@0.2.9;
+  import wasi:cli/terminal-output@0.2.9;
+  import wasi:cli/terminal-stdin@0.2.9;
+  import wasi:cli/terminal-stdout@0.2.9;
+  import wasi:cli/terminal-stderr@0.2.9;
+
+  export wasmcloud:messaging/handler@0.2.0;
+}
+```
+
+---
+
 ## Quick Start
 
 ```bash
