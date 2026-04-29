@@ -1,0 +1,68 @@
+# wasmCloud v2 deployment manifests for dark-vessels.
+#
+# Two WorkloadDeployments that communicate over NATS via the built-in
+# wasmcloud:messaging host plugin:
+#   - dark-vessels-api:  api-gateway component (HTTP entry, publishes on
+#         subject "tasks.sar-processor" via wasmcloud:messaging/consumer).
+#   - dark-vessels-sar:  sar-processor component (exports
+#         wasmcloud:messaging/handler; subscribes to "tasks.sar-processor").
+#
+# This manifest pulls the CPU-only sar-processor build (image tag
+# "0.1.0-cpu", built without `--features gpu`). The default `wash build`
+# configuration enables the gpu feature, which makes sar-processor import
+# wasi:webgpu/webgpu@0.0.1 — a host capability that requires the chart
+# value `runtime.hostGroups[0].webgpu.enabled=true` (passes --wasi-webgpu
+# to the wash host) AND a GPU-capable host. On a kind cluster on macOS,
+# WebGPU is unlikely to function; the CPU CFAR fallback is the working
+# path. To deploy the GPU build instead, swap in tag "0.1.0" and install
+# the chart with --set runtime.hostGroups[0].webgpu.enabled=true.
+#
+# Ingress: the wasmCloud runtime-gateway routes by Host header to the
+# component declaring a matching wasi:http config.host value. Test with:
+#   curl -H 'Host: dark-vessels.localhost.direct' http://localhost/
+#
+# Apply with: kubectl apply -f manifests/workloaddeployment.yaml
+---
+apiVersion: runtime.wasmcloud.dev/v1alpha1
+kind: WorkloadDeployment
+metadata:
+  name: dark-vessels-api
+spec:
+  replicas: 1
+  template:
+    spec:
+      hostInterfaces:
+        - namespace: wasi
+          package: http
+          interfaces:
+            - incoming-handler
+          config:
+            host: dark-vessels.localhost.direct
+        - namespace: wasmcloud
+          package: messaging
+          version: "0.2.0"
+          interfaces:
+            - consumer
+      components:
+        - name: api-gateway
+          image: ghcr.io/cosmonic-labs/dark-vessels/api-gateway:0.1.0
+---
+apiVersion: runtime.wasmcloud.dev/v1alpha1
+kind: WorkloadDeployment
+metadata:
+  name: dark-vessels-sar
+spec:
+  replicas: 1
+  template:
+    spec:
+      hostInterfaces:
+        - namespace: wasmcloud
+          package: messaging
+          version: "0.2.0"
+          interfaces:
+            - handler
+          config:
+            subscriptions: "tasks.sar-processor"
+      components:
+        - name: sar-processor
+          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.1.0-cpu
