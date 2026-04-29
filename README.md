@@ -267,6 +267,54 @@ Remove `--features gpu` from the build command and `wasi_webgpu: true` from dev 
 
 ---
 
+## Deploying to Kubernetes
+
+Dark Vessels can be deployed to a Kubernetes cluster running the wasmCloud `runtime-operator` chart. A ready-to-apply manifest is at [`manifests/workloaddeployment.yaml`](./manifests/workloaddeployment.yaml).
+
+### Requirements
+
+- A Kubernetes cluster with the wasmCloud `runtime-operator` chart installed
+- A host group with WebGPU enabled — pass `--set runtime.hostGroups[0].webgpu.enabled=true` to the chart so the wash host starts with `--wasi-webgpu`
+- A node with a usable GPU exposed to the host pod (Metal/Vulkan/DX12 via `wgpu`); on managed clusters this typically means a GPU node pool plus the appropriate device-plugin daemonset
+
+### Install + apply
+
+```bash
+helm install wasmcloud oci://ghcr.io/wasmcloud/charts/runtime-operator \
+  --version 2.0.4 \
+  --namespace wasmcloud --create-namespace \
+  --set runtime.hostGroups[0].webgpu.enabled=true \
+  --set gateway.service.type=NodePort \
+  --set gateway.service.nodePort=30950
+
+kubectl apply -f manifests/workloaddeployment.yaml
+```
+
+The `runtime-gateway` (installed by the chart) routes by `Host` header. Once both `WorkloadDeployment`s reach `Ready=True`:
+
+```bash
+curl -H 'Host: dark-vessels.localhost.direct' http://<gateway-host>/
+curl -H 'Host: dark-vessels.localhost.direct' \
+  -X POST -H 'Content-Type: application/json' -d '{}' \
+  http://<gateway-host>/api/detect
+```
+
+### Alternative: CPU-only deployment
+
+If your cluster does not have a GPU-capable node or the chart's `webgpu.enabled` flag is unavailable, you can deploy the CPU-only build instead. This drops the runtime GPU/CPU UI toggle (the component no longer imports `wasi:webgpu`) but keeps the rest of the pipeline intact: the same CA-CFAR algorithm runs in pure Rust on the CPU.
+
+Build and push the CPU-only image:
+
+```bash
+cargo build --workspace --target wasm32-wasip2 --release --no-default-features
+wash oci push <REGISTRY>/dark-vessels/sar-processor:0.1.0-cpu \
+  target/wasm32-wasip2/release/sar_processor.wasm
+```
+
+Then in `manifests/workloaddeployment.yaml`, change the `dark-vessels-sar` workload's image tag from `0.1.0` to `0.1.0-cpu` and reinstall the chart without the `webgpu.enabled` flag.
+
+---
+
 ## Connecting Real Data Sources
 
 ### Copernicus CDSE (Sentinel-1 SAR)

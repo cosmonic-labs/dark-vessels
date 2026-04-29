@@ -7,15 +7,16 @@
 #   - dark-vessels-sar:  sar-processor component (exports
 #         wasmcloud:messaging/handler; subscribes to "tasks.sar-processor").
 #
-# This manifest pulls the CPU-only sar-processor build (image tag
-# "0.1.0-cpu", built without `--features gpu`). The default `wash build`
-# configuration enables the gpu feature, which makes sar-processor import
-# wasi:webgpu/webgpu@0.0.1 — a host capability that requires the chart
-# value `runtime.hostGroups[0].webgpu.enabled=true` (passes --wasi-webgpu
-# to the wash host) AND a GPU-capable host. On a kind cluster on macOS,
-# WebGPU is unlikely to function; the CPU CFAR fallback is the working
-# path. To deploy the GPU build instead, swap in tag "0.1.0" and install
-# the chart with --set runtime.hostGroups[0].webgpu.enabled=true.
+# This manifest deploys the GPU-enabled sar-processor build. The
+# component imports wasi:webgpu/webgpu@0.0.1, which requires:
+#   - the wasmCloud chart installed with --set
+#     runtime.hostGroups[0].webgpu.enabled=true (passes --wasi-webgpu
+#     to the host)
+#   - a node with a usable GPU and the necessary device passthrough
+#
+# See README.md ("Deploying to Kubernetes") for full installation
+# steps and for the CPU-only deployment alternative on hosts without
+# WebGPU support.
 #
 # Ingress: the wasmCloud runtime-gateway routes by Host header to the
 # component declaring a matching wasi:http config.host value. Test with:
@@ -65,4 +66,4 @@ spec:
             subscriptions: "tasks.sar-processor"
       components:
         - name: sar-processor
-          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.1.0-cpu
+          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.1.0
