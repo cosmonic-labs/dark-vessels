@@ -37,13 +37,13 @@ jobs:
 
       # `wash build` runs the .wash/config.yaml command, which is
       # `cargo build --workspace --target wasm32-wasip2 --release --features gpu`.
-      # The gpu feature flag makes sar-processor import wasi:webgpu — that
-      # import is satisfied at deploy time by a host configured with WebGPU
-      # enabled (see manifests/workloaddeployment.yaml). The build itself
-      # works on any runner; the wasi:webgpu WIT is vendored under
-      # wit/deps/, so no fetch step is needed.
+      # The gpu feature flag makes sar-processor import wasi:webgpu, satisfied
+      # at deploy time by a WebGPU-enabled host (see manifests/workloaddeployment.yaml).
+      # `--skip-fetch` is required because the wasi:webgpu WIT is vendored
+      # under wit/deps/ rather than published to a registry; the default
+      # wash wit fetch step would otherwise fail on it.
       - name: Build components
-        run: wash build
+        run: wash build --skip-fetch
 
       - name: Compute image tags
         id: tags
@@ -81,7 +81,13 @@ jobs:
             tag=$(echo "$tag" | xargs)
             ref="${IMAGE}:${tag}"
             echo "Pushing $ref"
-            push_json=$(wash oci push --output json "$ref" "$PATH_WASM")
+            err=$(mktemp)
+            if ! push_json=$(wash oci push --output json "$ref" "$PATH_WASM" 2>"$err"); then
+              echo "::error::wash oci push failed for $ref"
+              echo "stdout:"; echo "$push_json"
+              echo "stderr:"; cat "$err"
+              exit 1
+            fi
             this_digest=$(echo "$push_json" | jq -r .data.digest)
             if [ -z "$this_digest" ] || [ "$this_digest" = "null" ]; then
               echo "::error::no digest in push output: $push_json"
@@ -106,7 +112,13 @@ jobs:
             tag=$(echo "$tag" | xargs)
             ref="${IMAGE}:${tag}"
             echo "Pushing $ref"
-            push_json=$(wash oci push --output json "$ref" "$PATH_WASM")
+            err=$(mktemp)
+            if ! push_json=$(wash oci push --output json "$ref" "$PATH_WASM" 2>"$err"); then
+              echo "::error::wash oci push failed for $ref"
+              echo "stdout:"; echo "$push_json"
+              echo "stderr:"; cat "$err"
+              exit 1
+            fi
             this_digest=$(echo "$push_json" | jq -r .data.digest)
             if [ -z "$this_digest" ] || [ "$this_digest" = "null" ]; then
               echo "::error::no digest in push output: $push_json"
