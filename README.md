@@ -269,7 +269,7 @@ Remove `--features gpu` from the build command and `wasi_webgpu: true` from dev 
 
 ## Deploying to Kubernetes
 
-Dark Vessels can be deployed to a Kubernetes cluster running the wasmCloud `runtime-operator` chart. A ready-to-apply manifest is at [`manifests/workloaddeployment.yaml`](./manifests/workloaddeployment.yaml).
+Dark Vessels can be deployed to a Kubernetes cluster running the wasmCloud `runtime-operator` chart. A ready-to-apply manifest is at [`deploy/wasmcloud/workloaddeployment.yaml`](./deploy/wasmcloud/workloaddeployment.yaml).
 
 ### Requirements
 
@@ -287,7 +287,7 @@ helm install wasmcloud oci://ghcr.io/wasmcloud/charts/runtime-operator \
   --set gateway.service.type=NodePort \
   --set gateway.service.nodePort=30950
 
-kubectl apply -f manifests/workloaddeployment.yaml
+kubectl apply -f deploy/wasmcloud/workloaddeployment.yaml
 ```
 
 The `runtime-gateway` (installed by the chart) routes by `Host` header. Once both `WorkloadDeployment`s reach `Ready=True`:
@@ -311,7 +311,7 @@ wash oci push <REGISTRY>/dark-vessels/sar-processor:0.1.0-cpu \
   target/wasm32-wasip2/release/sar_processor.wasm
 ```
 
-Then in `manifests/workloaddeployment.yaml`, change the `dark-vessels-sar` workload's image tag from `0.1.0` to `0.1.0-cpu` and reinstall the chart without the `webgpu.enabled` flag.
+Then in `deploy/wasmcloud/workloaddeployment.yaml`, change the `dark-vessels-sar` workload's image tag from `0.1.0` to `0.1.0-cpu` and reinstall the chart without the `webgpu.enabled` flag.
 
 ---
 
