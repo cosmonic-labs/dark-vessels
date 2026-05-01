@@ -22,7 +22,7 @@
 # component declaring a matching wasi:http config.host value. Test with:
 #   curl -H 'Host: dark-vessels.localhost.direct' http://localhost/
 #
-# Apply with: kubectl apply -f manifests/workloaddeployment.yaml
+# Apply with: kubectl apply -f deploy/wasmcloud/workloaddeployment.yaml
 ---
 apiVersion: runtime.wasmcloud.dev/v1alpha1
 kind: WorkloadDeployment
