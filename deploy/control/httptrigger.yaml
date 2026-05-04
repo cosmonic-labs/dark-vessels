@@ -1,3 +1,35 @@
+# Cosmonic Control HTTPTrigger for API gateway for dark-vessels.
+apiVersion: control.cosmonic.io/v1alpha1
+kind: HTTPTrigger
+metadata:
+  name: dv-apigateway
+  namespace: cosmonic-system
+spec:
+  ingress:
+    host: darkvessels.localhost.cosmonic.sh
+    paths:
+      - pathType: Prefix
+        path: /
+  timeout: 300s
+  replicas: 1
+  template:
+    spec:
+      hostInterfaces:
+        - namespace: wasi
+          package: logging
+          version: 0.1.0-draft
+          interfaces:
+            - logging
+        - namespace: wasmcloud
+          package: messaging
+          version: "0.2.0"
+          interfaces:
+            - consumer
+            - types
+      components:
+        - name: api-gateway
+          image: ghcr.io/cosmonic-labs/dark-vessels/api-gateway:0.1.0
+---
 # Cosmonic Control WorkloadDeployment for the SAR processor for dark-vessels.
 apiVersion: runtime.wasmcloud.dev/v1alpha1
 kind: WorkloadDeployment
