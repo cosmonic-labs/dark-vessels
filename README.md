@@ -269,7 +269,57 @@ Remove `--features gpu` from the build command and `wasi_webgpu: true` from dev 
 
 ## Deploying to Kubernetes
 
-Dark Vessels can be deployed to a Kubernetes cluster running the wasmCloud `runtime-operator` chart. A ready-to-apply manifest is at [`deploy/wasmcloud/workloaddeployment.yaml`](./deploy/wasmcloud/workloaddeployment.yaml).
+Dark Vessels has manifests for two targets:
+
+- **Cosmonic Control** — `deploy/control/httptrigger.yaml` (recommended; demoed below)
+- **Vanilla wasmCloud** — `deploy/wasmcloud/workloaddeployment.yaml` (the `runtime-operator` chart path; documented further down)
+
+### Cosmonic Control (kind)
+
+`deploy/control/httptrigger.yaml` declares both components: an `HTTPTrigger`
+fronting `api-gateway` and a `WorkloadDeployment` for `sar-processor`
+subscribed to `tasks.sar-processor` over NATS.
+
+The `sar-processor` component imports `wasi:webgpu`, so the hostgroup needs
+`--set gpu=true` — without it the workload sticks at `WORKLOAD_STATE_ERROR`
+because the host doesn't advertise the WebGPU interface.
+
+```bash
+# 1. Kind cluster with port 80/443 forwarded to Traefik's NodePorts
+cat > kind-config.yaml <<'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 30443
+        hostPort: 443
+        protocol: TCP
+EOF
+kind create cluster --config ./kind-config.yaml
+
+# 2. Cosmonic Control + hostgroup (gpu=true is required for sar-processor)
+helm upgrade --install cosmonic-control oci://ghcr.io/cosmonic/cosmonic-control \
+  --version 0.4.1 \
+  --namespace cosmonic-system --create-namespace \
+  --set 'ingress.hosts[0].host=darkvessels.localhost.cosmonic.sh'
+
+helm upgrade --install hostgroup oci://ghcr.io/cosmonic/cosmonic-control-hostgroup \
+  --version 0.4.1 --namespace cosmonic-system --set gpu=true
+
+# 3. Apply the manifest
+kubectl apply -f https://raw.githubusercontent.com/cosmonic-labs/dark-vessels/main/deploy/control/httptrigger.yaml
+```
+
+`*.localhost.cosmonic.sh` resolves to `127.0.0.1`, so once the workloads are
+ready, browse to <http://darkvessels.localhost.cosmonic.sh>.
+
+### Vanilla wasmCloud (`runtime-operator` chart)
+
+A ready-to-apply manifest is at [`deploy/wasmcloud/workloaddeployment.yaml`](./deploy/wasmcloud/workloaddeployment.yaml).
 
 ### Requirements
 
