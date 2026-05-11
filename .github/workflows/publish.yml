@@ -1,0 +1,149 @@
+name: Build and publish dark-vessels components
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (defaults to a sha-based tag)."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+jobs:
+  build-and-publish:
+    name: Build and push api-gateway + sar-processor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (wasm32-wasip2)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Setup wash CLI
+        uses: wasmcloud/setup-wash-action@main
+        with:
+          wash-version: "v2.0.5"
+
+      # `wash build` runs the .wash/config.yaml command, which is
+      # `cargo build --workspace --target wasm32-wasip2 --release --features gpu`.
+      # The gpu feature flag makes sar-processor import wasi:webgpu, satisfied
+      # at deploy time by a WebGPU-enabled host (see manifests/workloaddeployment.yaml).
+      # `--skip-fetch` is required because the wasi:webgpu WIT is vendored
+      # under wit/deps/ rather than published to a registry; the default
+      # wash wit fetch step would otherwise fail on it.
+      - name: Build components
+        run: wash build --skip-fetch
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          tags=()
+          [ -n "${{ inputs.tag }}" ] && tags+=("${{ inputs.tag }}")
+          tags+=("sha-${GITHUB_SHA::7}")
+          [ "${GITHUB_REF}" = "refs/heads/main" ] && tags+=("latest")
+          [[ "${GITHUB_REF}" == refs/tags/v* ]] && tags+=("${GITHUB_REF_NAME#v}")
+          printf '%s\n' "${tags[@]}" | awk '!seen[$0]++' | paste -sd, - > tags.txt
+          echo "image_tags=$(cat tags.txt)" >> "$GITHUB_OUTPUT"
+          echo "Computed image tags: $(cat tags.txt)"
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Push api-gateway
+        id: push-api-gateway
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.tags.outputs.image_tags }}
+          IMAGE: ghcr.io/cosmonic-labs/dark-vessels/api-gateway
+          PATH_WASM: target/wasm32-wasip2/release/api_gateway.wasm
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra TAGS <<< "$IMAGE_TAGS"
+          digest=""
+          for tag in "${TAGS[@]}"; do
+            tag=$(echo "$tag" | xargs)
+            ref="${IMAGE}:${tag}"
+            echo "Pushing $ref"
+            err=$(mktemp)
+            if ! push_json=$(wash oci push --output json "$ref" "$PATH_WASM" 2>"$err"); then
+              echo "::error::wash oci push failed for $ref"
+              echo "stdout:"; echo "$push_json"
+              echo "stderr:"; cat "$err"
+              exit 1
+            fi
+            this_digest=$(echo "$push_json" | jq -r .data.digest)
+            if [ -z "$this_digest" ] || [ "$this_digest" = "null" ]; then
+              echo "::error::no digest in push output: $push_json"
+              exit 1
+            fi
+            digest="$this_digest"
+          done
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Push sar-processor
+        id: push-sar-processor
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.tags.outputs.image_tags }}
+          IMAGE: ghcr.io/cosmonic-labs/dark-vessels/sar-processor
+          PATH_WASM: target/wasm32-wasip2/release/sar_processor.wasm
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra TAGS <<< "$IMAGE_TAGS"
+          digest=""
+          for tag in "${TAGS[@]}"; do
+            tag=$(echo "$tag" | xargs)
+            ref="${IMAGE}:${tag}"
+            echo "Pushing $ref"
+            err=$(mktemp)
+            if ! push_json=$(wash oci push --output json "$ref" "$PATH_WASM" 2>"$err"); then
+              echo "::error::wash oci push failed for $ref"
+              echo "stdout:"; echo "$push_json"
+              echo "stderr:"; cat "$err"
+              exit 1
+            fi
+            this_digest=$(echo "$push_json" | jq -r .data.digest)
+            if [ -z "$this_digest" ] || [ "$this_digest" = "null" ]; then
+              echo "::error::no digest in push output: $push_json"
+              exit 1
+            fi
+            digest="$this_digest"
+          done
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # Build provenance attestation requires the GitHub artifact attestation
+      # feature, which is currently not enabled on the cosmonic-labs plan.
+      # Kept in the workflow as continue-on-error so re-enabling it later is
+      # just a matter of removing the flag once billing is upgraded.
+      - name: Attest api-gateway
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/cosmonic-labs/dark-vessels/api-gateway
+          subject-digest: ${{ steps.push-api-gateway.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest sar-processor
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/cosmonic-labs/dark-vessels/sar-processor
+          subject-digest: ${{ steps.push-sar-processor.outputs.digest }}
+          push-to-registry: true
