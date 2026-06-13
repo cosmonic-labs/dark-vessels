@@ -48,6 +48,10 @@ spec:
       components:
         - name: api-gateway
           image: ghcr.io/cosmonic-labs/dark-vessels/api-gateway:0.1.0
+          localResources:
+            allowedHosts:
+              - "https://dataspace.copernicus.eu"
+              - "https://www.aishub.net"
 ---
 apiVersion: runtime.wasmcloud.dev/v1alpha1
 kind: WorkloadDeployment
