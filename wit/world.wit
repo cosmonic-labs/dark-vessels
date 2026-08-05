@@ -1,16 +1,23 @@
 package darkvessel:dark-vessels;
 
 world api-gateway {
-  import wasmcloud:messaging/consumer@0.2.0;
+  // The gateway talks to sar-processor over intra-workload HTTP (wstd's
+  // wasip2 client); it needs no non-WASI imports of its own.
 }
 
 world sar-processor {
   import wasmcloud:messaging/consumer@0.2.0;
   export wasmcloud:messaging/handler@0.2.0;
+  // GPU-capable detection trigger: the async P3 HTTP export. The sync
+  // messaging handler cannot block on wasi:webgpu's `async func` imports
+  // (wasmtime rejects guest waits inside a sync-lifted export), so GPU
+  // requests arrive here.
+  export wasi:http/handler@0.3.0;
 }
 
 world sar-processor-gpu {
-  import wasi:webgpu/webgpu@0.0.1;
+  import wasi:webgpu/webgpu@0.3.0-rc.2;
   import wasmcloud:messaging/consumer@0.2.0;
   export wasmcloud:messaging/handler@0.2.0;
+  export wasi:http/handler@0.3.0;
 }

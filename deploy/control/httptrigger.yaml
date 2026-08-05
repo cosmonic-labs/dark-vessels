@@ -1,17 +1,21 @@
-# Cosmonic Control HTTPTrigger for API gateway for dark-vessels.
+# Cosmonic Control HTTPTrigger for dark-vessels.
 #
-# The api-gateway serves a single-file SPA that loads resources from several
-# external origins. Outbound access from the component is scoped to those
-# hosts via localResources.allowedHosts:
-#   - unpkg.com              MapLibre GL JS CSS + JS bundle
-#   - tile.openstreetmap.org  Raster map tiles
-#   - nominatim.openstreetmap.org  Geocoding / location search
+# ONE trigger, ONE component: the sar-processor image serves the SPA and the
+# detection API behind the async `wasi:http/handler@0.3.0` export and runs
+# CA-CFAR on the GPU via `wasi:webgpu@0.3.0-rc.2` (requires wasmCloud >=
+# v2.6.1 and a webgpu-enabled host group). The messaging surface remains as
+# a CPU-only compatibility trigger.
+#
+# The SPA loads resources from several external origins; outbound access is
+# scoped via localResources.allowedHosts:
 #   - dataspace.copernicus.eu  CDSE OAuth + Sentinel-1 SAR imagery (optional)
-#   - www.aishub.net         Live AIS vessel feed (optional)
+#   - www.aishub.net           Live AIS vessel feed (optional)
+# (unpkg.com / openstreetmap tiles are fetched by the BROWSER, not the
+# component, and need no allowedHosts entries.)
 apiVersion: control.cosmonic.io/v1alpha1
 kind: HTTPTrigger
 metadata:
-  name: dv-apigateway
+  name: dark-vessels
   namespace: cosmonic-system
 spec:
   ingress:
@@ -29,39 +33,9 @@ spec:
           version: 0.1.0-draft
           interfaces:
             - logging
-        - namespace: wasmcloud
-          package: messaging
-          version: "0.2.0"
-          interfaces:
-            - consumer
-            - types
-      components:
-        - name: api-gateway
-          image: ghcr.io/cosmonic-labs/dark-vessels/api-gateway:0.1.0
-          localResources:
-            allowedHosts:
-              - "https://dataspace.copernicus.eu"
-              - "https://www.aishub.net"
----
-# Cosmonic Control WorkloadDeployment for the SAR processor for dark-vessels.
-apiVersion: runtime.wasmcloud.dev/v1alpha1
-kind: WorkloadDeployment
-metadata:
-  name: dv-sarproc
-  namespace: cosmonic-system
-spec:
-  replicas: 1
-  template:
-    spec:
-      hostInterfaces:
-        - namespace: wasi
-          package: logging
-          version: 0.1.0-draft
-          interfaces:
-            - logging
         - namespace: wasi
           package: webgpu
-          version: 0.0.1
+          version: 0.3.0-rc.2
           interfaces:
             - webgpu
         - namespace: wasmcloud
@@ -74,6 +48,10 @@ spec:
           config:
             subscriptions: tasks.sar-processor
       components:
-        - name: sar-processor
-          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.1.0
+        - name: dark-vessels
+          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.2.0
           poolSize: 1
+          localResources:
+            allowedHosts:
+              - "https://dataspace.copernicus.eu"
+              - "https://www.aishub.net"

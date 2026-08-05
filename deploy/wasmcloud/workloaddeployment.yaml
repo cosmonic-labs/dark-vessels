@@ -1,14 +1,15 @@
-# wasmCloud v2 deployment manifests for dark-vessels.
+# wasmCloud v2 deployment manifest for dark-vessels.
 #
-# Two WorkloadDeployments that communicate over NATS via the built-in
-# wasmcloud:messaging host plugin:
-#   - dark-vessels-api:  api-gateway component (HTTP entry, publishes on
-#         subject "tasks.sar-processor" via wasmcloud:messaging/consumer).
-#   - dark-vessels-sar:  sar-processor component (exports
-#         wasmcloud:messaging/handler; subscribes to "tasks.sar-processor").
+# ONE WorkloadDeployment, ONE component: the sar-processor image serves the
+# UI and the detection API behind the async `wasi:http/handler@0.3.0` (P3)
+# export, and runs CA-CFAR ship detection on the GPU via
+# `wasi:webgpu@0.3.0-rc.2`. Detection lives behind the ASYNC http export
+# because the runtime declares the webgpu acquisition/map functions
+# `async func` — a sync-lifted export (like the messaging handler) cannot
+# await them. The `wasmcloud:messaging` surface is retained as a CPU-only
+# compatibility trigger on subject "tasks.sar-processor".
 #
-# This manifest deploys the GPU-enabled sar-processor build. The
-# component imports wasi:webgpu/webgpu@0.0.1, which requires:
+# Requires wasmCloud >= v2.6.1 (wasi:webgpu@0.3.0-rc.2 + P3 HTTP), with:
 #   - the wasmCloud chart installed with --set
 #     runtime.hostGroups[0].webgpu.enabled=true (passes --wasi-webgpu
 #     to the host)
@@ -27,7 +28,7 @@
 apiVersion: runtime.wasmcloud.dev/v1alpha1
 kind: WorkloadDeployment
 metadata:
-  name: dark-vessels-api
+  name: dark-vessels
 spec:
   replicas: 1
   template:
@@ -36,35 +37,12 @@ spec:
         - namespace: wasi
           package: http
           interfaces:
-            - incoming-handler
+            - handler
           config:
             host: dark-vessels.localhost.direct
-        - namespace: wasmcloud
-          package: messaging
-          version: "0.2.0"
-          interfaces:
-            - consumer
-            - types
-      components:
-        - name: api-gateway
-          image: ghcr.io/cosmonic-labs/dark-vessels/api-gateway:0.1.0
-          localResources:
-            allowedHosts:
-              - "https://dataspace.copernicus.eu"
-              - "https://www.aishub.net"
----
-apiVersion: runtime.wasmcloud.dev/v1alpha1
-kind: WorkloadDeployment
-metadata:
-  name: dark-vessels-sar
-spec:
-  replicas: 1
-  template:
-    spec:
-      hostInterfaces:
         - namespace: wasi
           package: webgpu
-          version: "0.0.1"
+          version: 0.3.0-rc.2
           interfaces:
             - webgpu
         - namespace: wasmcloud
@@ -75,8 +53,12 @@ spec:
             - consumer
             - types
           config:
-            subscriptions: "tasks.sar-processor"
+            subscriptions: tasks.sar-processor
       components:
-        - name: sar-processor
-          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.1.0
+        - name: dark-vessels
+          image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.2.0
           poolSize: 1
+          localResources:
+            allowedHosts:
+              - "https://dataspace.copernicus.eu"
+              - "https://www.aishub.net"

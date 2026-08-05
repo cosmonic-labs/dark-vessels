@@ -13,15 +13,18 @@ unsafe impl Sync for GpuResources {}
 
 static GPU_RESOURCES: OnceLock<GpuResources> = OnceLock::new();
 
-fn get_gpu_resources() -> Result<&'static GpuResources, String> {
+async fn get_gpu_resources() -> Result<&'static GpuResources, String> {
     if let Some(res) = GPU_RESOURCES.get() {
         return Ok(res);
     }
 
+    // wasi:webgpu@0.3.0-rc.2 declares adapter/device acquisition `async func`.
     let device = webgpu::get_gpu()
         .request_adapter(None)
+        .await
         .ok_or("no GPU adapter available")?
         .request_device(None)
+        .await
         .map_err(|e| format!("failed to get GPU device: {}", e.message))?;
 
     // Load the CFAR compute shader
@@ -44,19 +47,19 @@ fn get_gpu_resources() -> Result<&'static GpuResources, String> {
 
     let res = GpuResources { device, pipeline };
     let _ = GPU_RESOURCES.set(res);
-    
+
     GPU_RESOURCES.get().ok_or_else(|| "Failed to initialize GPU resources".to_string())
 }
 
 /// Run the CA-CFAR ship detection algorithm on the GPU via wasi:webgpu.
 /// Returns a detection mask (1 = ship, 0 = clutter) for each pixel.
-pub fn run_cfar_gpu(
+pub async fn run_cfar_gpu(
     sar_image: &[f32],
     width: u32,
     height: u32,
     params: &CfarParams,
 ) -> Result<Vec<u32>, String> {
-    let res = get_gpu_resources()?;
+    let res = get_gpu_resources().await?;
     let device = &res.device;
     let pipeline = &res.pipeline;
 
@@ -68,8 +71,7 @@ pub fn run_cfar_gpu(
     let image_buffer = device.create_buffer(&webgpu::GpuBufferDescriptor {
         label: Some("sar_image_buffer".to_string()),
         size: image_size_bytes,
-        usage: webgpu::GpuBufferUsage::storage()
-            | webgpu::GpuBufferUsage::copy_dst(),
+        usage: webgpu::GpuBufferUsage::STORAGE | webgpu::GpuBufferUsage::COPY_DST,
         mapped_at_creation: Some(true),
     });
     let image_bytes: &[u8] = bytemuck::cast_slice(sar_image);
@@ -82,8 +84,7 @@ pub fn run_cfar_gpu(
     let detection_buffer = device.create_buffer(&webgpu::GpuBufferDescriptor {
         label: Some("detection_buffer".to_string()),
         size: detection_size_bytes,
-        usage: webgpu::GpuBufferUsage::storage()
-            | webgpu::GpuBufferUsage::copy_src(),
+        usage: webgpu::GpuBufferUsage::STORAGE | webgpu::GpuBufferUsage::COPY_SRC,
         mapped_at_creation: None,
     });
 
@@ -101,8 +102,7 @@ pub fn run_cfar_gpu(
     let params_buffer = device.create_buffer(&webgpu::GpuBufferDescriptor {
         label: Some("cfar_params_buffer".to_string()),
         size: params_size_bytes,
-        usage: webgpu::GpuBufferUsage::uniform()
-            | webgpu::GpuBufferUsage::copy_dst(),
+        usage: webgpu::GpuBufferUsage::UNIFORM | webgpu::GpuBufferUsage::COPY_DST,
         mapped_at_creation: Some(true),
     });
     let params_bytes: &[u8] = bytemuck::bytes_of(&params_data);
@@ -115,8 +115,7 @@ pub fn run_cfar_gpu(
     let staging_buffer = device.create_buffer(&webgpu::GpuBufferDescriptor {
         label: Some("staging_buffer".to_string()),
         size: detection_size_bytes,
-        usage: webgpu::GpuBufferUsage::map_read()
-            | webgpu::GpuBufferUsage::copy_dst(),
+        usage: webgpu::GpuBufferUsage::MAP_READ | webgpu::GpuBufferUsage::COPY_DST,
         mapped_at_creation: None,
     });
 
@@ -178,15 +177,17 @@ pub fn run_cfar_gpu(
         cpass.end();
     }
 
-    // Copy detection results to staging buffer
-    encoder.copy_buffer_to_buffer(&detection_buffer, 0, &staging_buffer, 0, detection_size_bytes);
+    // Copy detection results to staging buffer (offsets default to 0, size to
+    // the remainder of the source)
+    encoder.copy_buffer_to_buffer(&detection_buffer, None, &staging_buffer, None, None);
 
     // Submit and wait
     device.queue().submit(&[&encoder.finish(None)]);
 
-    // Map staging buffer and read results
+    // Map staging buffer and read results (async in 0.3.0-rc.2)
     staging_buffer
-        .map_async(webgpu::GpuMapMode::read(), Some(0), None)
+        .map_async(webgpu::GpuMapMode::READ, None, None)
+        .await
         .map_err(|e| format!("map_async error: {:?}", e.kind))?;
 
     let data = staging_buffer

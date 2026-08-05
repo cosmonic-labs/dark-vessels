@@ -2,7 +2,7 @@ version: 2.0.0
 
 build:
   command: cargo build --workspace --target wasm32-wasip2 --release --features gpu
-  component_path: target/wasm32-wasip2/release/api_gateway.wasm
+  component_path: target/wasm32-wasip2/release/sar_processor.wasm
 
 dev:
   components:

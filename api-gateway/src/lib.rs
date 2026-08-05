@@ -1,16 +1,5 @@
-mod bindings {
-    wit_bindgen::generate!({
-        path: "../wit",
-        world: "api-gateway",
-        generate_all,
-    });
-}
-
-use bindings::wasmcloud::messaging::consumer;
-
 use serde::{Deserialize, Serialize};
-use wstd::http::{Body, Request, Response, StatusCode};
-use wstd::time::Duration;
+use wstd::http::{Body, Client, Request, Response, StatusCode};
 
 static UI_HTML: &str = include_str!("../ui.html");
 static LOGO_PNG: &[u8] = include_bytes!("../../icons/Cosmonic.Logo-Hrztl_Color.png");
@@ -68,15 +57,68 @@ fn error_response(status: StatusCode, message: &str) -> anyhow::Result<Response<
         .map_err(Into::into)
 }
 
+/// Base URL of the sar-processor's HTTP trigger. Points at the workload HTTP
+/// ingress by Host name; override with the SAR_URL env var when the ingress
+/// listens elsewhere (e.g. a non-default port or a cluster gateway).
+fn sar_url() -> String {
+    std::env::var("SAR_URL").unwrap_or_else(|_| "http://dv-sar.localhost:8200".to_string())
+}
+
+/// Percent-encode a query payload (unreserved characters pass through).
+fn percent_encode(input: &[u8]) -> String {
+    let mut out = String::with_capacity(input.len() * 3);
+    for &b in input {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Run a detection round trip against sar-processor's `/detect` HTTP trigger
+/// and return the raw DetectionResult JSON.
+async fn sar_detect(request_json: &[u8]) -> Result<Vec<u8>, String> {
+    let url = format!(
+        "{}/detect?req={}",
+        sar_url().trim_end_matches('/'),
+        percent_encode(request_json)
+    );
+    let req = Request::builder()
+        .method("GET")
+        .uri(url)
+        .body(Body::empty())
+        .map_err(|e| format!("building request: {e}"))?;
+    let mut resp = Client::new()
+        .send(req)
+        .await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let body = resp
+        .body_mut()
+        .contents()
+        .await
+        .map_err(|e| format!("reading response: {e}"))?
+        .to_vec();
+    // The processor reports failures as {"error": "..."} JSON.
+    if let Ok(err) = serde_json::from_slice::<ProcessorError>(&body) {
+        return Err(err.error);
+    }
+    Ok(body)
+}
+
+#[derive(Deserialize)]
+struct ProcessorError {
+    error: String,
+}
+
 /// GET /api/vessels — run detection with default params, return GeoJSON
 async fn get_vessels(_req: Request<Body>) -> anyhow::Result<Response<Body>> {
-    let request_body = b"{}";
-    let timeout = Duration::from_secs(120).as_millis() as u32;
-
-    match consumer::request("tasks.sar-processor", request_body, timeout) {
+    match sar_detect(b"{}").await {
         Ok(resp) => {
             // Parse the DetectionResult and convert to GeoJSON
-            match serde_json::from_slice::<DetectionResult>(&resp.body) {
+            match serde_json::from_slice::<DetectionResult>(&resp) {
                 Ok(result) => {
                     let geojson = to_geojson(&result);
                     let body = serde_json::to_vec(&geojson)
@@ -99,11 +141,10 @@ async fn get_vessels(_req: Request<Body>) -> anyhow::Result<Response<Body>> {
 /// POST /api/detect — run detection with custom params
 async fn post_detect(mut req: Request<Body>) -> anyhow::Result<Response<Body>> {
     let body_bytes = req.body_mut().contents().await?.to_vec();
-    let timeout = Duration::from_secs(120).as_millis() as u32;
 
-    match consumer::request("tasks.sar-processor", &body_bytes, timeout) {
+    match sar_detect(&body_bytes).await {
         Ok(resp) => {
-            match serde_json::from_slice::<DetectionResult>(&resp.body) {
+            match serde_json::from_slice::<DetectionResult>(&resp) {
                 Ok(result) => {
                     let geojson = to_geojson(&result);
                     let body = serde_json::to_vec(&geojson)

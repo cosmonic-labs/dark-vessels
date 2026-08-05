@@ -37,67 +37,40 @@ This demonstration is designed to show the WebAssembly inside of a GPU so data s
 ## Architecture
 
 ```
-                           wasmCloud 2.0 Host (wash dev)
-    ┌──────────────────────────────────────────────────────────────────────┐
-    │                                                                      │
-    │  ┌─────────────────────────┐    NATS     ┌──────────────────────────┐│
-    │  │     api-gateway.wasm    │  messaging   │    sar-processor.wasm   ││
-    │  │         391 KB          │◄────────────►│         247 KB          ││
-    │  │                         │              │                         ││
-    │  │  Exports:               │              │  Exports:               ││
-    │  │   wasi:http/incoming-   │              │   wasmcloud:messaging/  ││
-    │  │     handler             │              │     handler             ││
-    │  │                         │              │                         ││
-    │  │  Imports:               │              │  Imports:               ││
-    │  │   wasmcloud:messaging/  │              │   wasi:webgpu/webgpu    ││
-    │  │     consumer            │              │   wasmcloud:messaging/  ││
-    │  │                         │              │     consumer            ││
-    │  │  ┌───────────────────┐  │              │                         ││
-    │  │  │  Embedded SPA UI  │  │              │  ┌───────────────────┐  ││
-    │  │  │  (MapLibre GL JS) │  │              │  │  WGSL Compute     │  ││
-    │  │  │  391 KB total     │  │              │  │  Shader (CFAR)    │  ││
-    │  │  └───────────────────┘  │              │  └────────┬──────────┘  ││
-    │  └─────────┬───────────────┘              │           │             ││
-    │            │                              │     ┌─────▼─────┐       ││
-    │            │ HTTP :8000                   │     │   wgpu    │       ││
-    │            │                              │     │  (Metal/  │       ││
-    │            │                              │     │  Vulkan)  │       ││
-    │            │                              │     └───────────┘       ││
-    │            │                              └─────────────────────────┘│
-    └────────────┼─────────────────────────────────────────────────────────┘
-                 │
-    ┌────────────▼────────────────────────────────────────────────────────┐
-    │                        Browser                                      │
-    │                                                                     │
-    │  ┌──────────────────────────────────────────────────────────────┐   │
-    │  │  MapLibre GL JS Map                                          │   │
-    │  │  ┌─────────┐  ┌─────────────┐  ┌──────────────────────────┐  │   │
-    │  │  │ Search   │  │ Draw BBox   │ │  Stats Dashboard         │  │   │
-    │  │  │ (Nominat-│  │ Tool        │ │  GPU/CPU Toggle          │  │   │
-    │  │  │  im API) │  │             │ │  Density Slider          │  │   │
-    │  │  └─────────┘  └─────────────┘  │  Size Classification     │  │   │
-    │  │                                │  Ship Silhouette Popups  │  │   │
-    │  │  ● Green = AIS Matched         │  SAR Radar Footprint     │  │   │
-    │  │  ● Red (pulse) = Dark Vessel   │  Feet/Meters Toggle      │  │   │
-    │  │  ○ Amber = AIS Only            └──────────────────────────┘  │   │
-    │  └──────────────────────────────────────────────────────────────┘   │
-    └─────────────────────────────────────────────────────────────────────┘
-
-    External Services (optional, credentials stored in browser cookies):
-    ┌─────────────────────┐    ┌──────────────────┐
-    │  Copernicus CDSE    │    │  AISHub API      │
-    │  (Sentinel-1 SAR)   │    │  (AIS Telemetry) │
-    │  dataspace.         │    │  aishub.net      │
-    │   copernicus.eu     │    │                  │
-    └─────────────────────┘    └──────────────────┘
-
-    Geocoding:
-    ┌─────────────────────┐
-    │  OpenStreetMap      │
-    │  Nominatim          │
-    │  (Location Search)  │
-    └─────────────────────┘
+                        wasmCloud Host (>= v2.6.1)
+    ┌──────────────────────────────────────────────────────────┐
+    │                                                          │
+    │  ┌────────────────────────────────────────────────────┐  │
+    │  │               sar-processor.wasm (~414 KB)         │  │
+    │  │                                                    │  │
+    │  │  Exports:                                          │  │
+    │  │   wasi:http/handler@0.3.0 (async, P3)              │  │
+    │  │     GET /              embedded SPA (MapLibre GL)  │  │
+    │  │     GET /api/vessels   detection -> GeoJSON        │  │
+    │  │     GET /api/detect    custom detection -> GeoJSON │  │
+    │  │   wasmcloud:messaging/handler@0.2.0 (CPU-only)     │  │
+    │  │                                                    │  │
+    │  │  Imports:                                          │  │
+    │  │   wasi:webgpu/webgpu@0.3.0-rc.2 (async)            │  │
+    │  │   wasmcloud:messaging/consumer@0.2.0               │  │
+    │  │                                                    │  │
+    │  │  ┌──────────────────────┐                          │  │
+    │  │  │ WGSL Compute Shader  │──► wgpu-core ──► GPU     │  │
+    │  │  │ (CA-CFAR detection)  │    (Metal / Vulkan / DX) │  │
+    │  │  └──────────────────────┘                          │  │
+    │  └────────────────────────────────────────────────────┘  │
+    │                                                          │
+    └──────────────────────────────────────────────────────────┘
 ```
+
+One workload, one component. Detection lives behind the **async**
+`wasi:http/handler@0.3.0` export because `wasi:webgpu@0.3.0-rc.2` declares
+its acquisition/map functions `async func` — a sync-lifted export (like the
+messaging handler) cannot await them, so the messaging trigger remains as a
+CPU-only compatibility surface on subject `tasks.sar-processor`. The
+`api-gateway` crate is retained in-tree but is no longer part of the default
+deployment.
+
 
 ---
 
@@ -215,7 +188,7 @@ package root:component;
 
 world root {
   import wasi:io/poll@0.2.9;
-  import wasi:webgpu/webgpu@0.0.1;
+  import wasi:webgpu/webgpu@0.3.0-rc.2;
   import wasmcloud:messaging/types@0.2.0;
   import wasmcloud:messaging/consumer@0.2.0;
   import wasi:clocks/monotonic-clock@0.2.9;
@@ -241,7 +214,7 @@ world root {
 ## Quick Start
 
 ```bash
-# Prerequisites: wash 2.0.4+, Rust with wasm32-wasip2 target
+# Prerequisites: wash v2.6.1+ (wasi:webgpu@0.3.0-rc.2 + P3 HTTP), Rust with wasm32-wasip2 target
 wash dev
 # Open http://localhost:8000
 ```

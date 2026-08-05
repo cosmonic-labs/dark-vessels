@@ -707,7 +707,7 @@ async function runDetection(forceSynthetic) {
     const ais=getCookie('aishub_key'); if(ais)body.aishub_key=ais;
   }
   try {
-    const resp=await fetch('/api/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const resp=await fetch('/api/detect?req='+encodeURIComponent(JSON.stringify(body)));
     if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
     const data=await resp.json();
     currentData=data;

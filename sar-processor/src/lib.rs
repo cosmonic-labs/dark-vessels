@@ -3,6 +3,9 @@ wit_bindgen::generate!({
     path: "../wit",
     world: "sar-processor-gpu",
     generate_all,
+    // WIT-default async bindings: wasi:http/handler@0.3.0's `handle` and
+    // wasi:webgpu@0.3.0-rc.2's acquisition/map functions are declared
+    // `async func`, so they generate async Rust; everything else stays sync.
 });
 
 #[cfg(not(feature = "gpu"))]
@@ -13,6 +16,7 @@ wit_bindgen::generate!({
 });
 
 pub mod types;
+pub mod geojson;
 pub mod synthetic;
 pub mod ocean;
 #[cfg(feature = "gpu")]
@@ -23,6 +27,7 @@ pub mod spatial_join;
 use crate::types::{
     DetectionRequest, DetectionResult, ProcessingStats, VesselStatus, get_region_bbox, CfarParams,
 };
+use crate::wasi::http::types::{ErrorCode, Fields, Request, Response};
 use crate::wasmcloud::messaging::types::BrokerMessage;
 use wasmcloud::messaging::consumer;
 #[allow(unused)]
@@ -37,14 +42,21 @@ impl exports::wasmcloud::messaging::handler::Guest for Component {
             return Err("missing reply_to".to_string());
         };
 
-        let request: DetectionRequest = if msg.body.is_empty() {
+        let mut request: DetectionRequest = if msg.body.is_empty() {
             DetectionRequest::default()
         } else {
             serde_json::from_slice(&msg.body)
                 .map_err(|e| format!("invalid request JSON: {e}"))?
         };
 
-        let result = run_detection_pipeline(&request)?;
+        // The messaging handler is a sync-lifted export, and wasmtime rejects
+        // guest-side blocking on wasi:webgpu's async imports from one — GPU
+        // requests must come through the async wasi:http/handler export
+        // instead. Force the CPU path here so `block_on` completes on its
+        // first poll (nothing ever suspends).
+        request.force_cpu = true;
+        let result =
+            wit_bindgen::rt::async_support::block_on(run_detection_pipeline(&request))?;
 
         let response_json = serde_json::to_vec(&result)
             .map_err(|e| format!("failed to serialize result: {e}"))?;
@@ -59,7 +71,124 @@ impl exports::wasmcloud::messaging::handler::Guest for Component {
     }
 }
 
-fn run_cfar(
+static UI_HTML: &str = include_str!("../../api-gateway/ui.html");
+static LOGO_PNG: &[u8] = include_bytes!("../../icons/Cosmonic.Logo-Hrztl_Color.png");
+
+impl exports::wasi::http::handler::Guest for Component {
+    /// The whole demo behind the async P3 HTTP export (awaiting the webgpu
+    /// imports is only legal in an async-lifted export, so detection lives
+    /// here):
+    ///   GET  /                          — the UI
+    ///   GET  /logo.png
+    ///   GET  /api/vessels               — default detection, GeoJSON
+    ///   GET  /api/detect?req=<json>     — custom detection, GeoJSON
+    ///   GET  /detect?req=<json>         — custom detection, raw DetectionResult
+    async fn handle(request: Request) -> Result<Response, ErrorCode> {
+        let path = request.get_path_with_query().unwrap_or_default();
+
+        if path == "/" || path.is_empty() {
+            return respond("text/html; charset=utf-8", UI_HTML.as_bytes().to_vec());
+        }
+        if path == "/logo.png" {
+            return respond("image/png", LOGO_PNG.to_vec());
+        }
+
+        let (raw, req_json) = if path == "/api/vessels" {
+            (false, b"{}".to_vec())
+        } else if let Some(q) = path.strip_prefix("/api/detect?req=") {
+            (false, percent_decode(q.as_bytes()))
+        } else if path.starts_with("/api/detect") {
+            (false, b"{}".to_vec())
+        } else if let Some(q) = path.strip_prefix("/detect?req=") {
+            (true, percent_decode(q.as_bytes()))
+        } else if path.starts_with("/detect") {
+            (true, b"{}".to_vec())
+        } else {
+            return respond(
+                "application/json",
+                br#"{"error":"not found"}"#.to_vec(),
+            );
+        };
+
+        let json = match serde_json::from_slice::<DetectionRequest>(&req_json) {
+            Ok(req) => match run_detection_pipeline(&req).await {
+                Ok(result) => {
+                    if raw {
+                        serde_json::to_vec(&result)
+                    } else {
+                        serde_json::to_vec(&geojson::to_geojson(&result))
+                    }
+                    .unwrap_or_else(|e| format!(r#"{{"error":"serialize: {e}"}}"#).into_bytes())
+                }
+                Err(e) => format!(r#"{{"error":{}}}"#, serde_json::json!(e)).into_bytes(),
+            },
+            Err(e) => format!(
+                r#"{{"error":{}}}"#,
+                serde_json::json!(format!("invalid request JSON: {e}"))
+            )
+            .into_bytes(),
+        };
+        respond("application/json", json)
+    }
+}
+
+/// Build a streamed 200 response (the P3 response body is a stream).
+fn respond(content_type: &str, body: Vec<u8>) -> Result<Response, ErrorCode> {
+    let headers = Fields::from_list(&[(
+        "content-type".to_string(),
+        content_type.as_bytes().to_vec(),
+    )])
+    .unwrap_or_else(|_| Fields::new());
+    let (mut tx, rx) = crate::wit_stream::new();
+    let (trailers_tx, trailers_rx) = crate::wit_future::new(|| Ok(None));
+    wit_bindgen::spawn_local(async move {
+        tx.write_all(body).await;
+        drop(tx);
+        let _ = trailers_tx.write(Ok(None)).await;
+    });
+    let (response, _result) = Response::new(headers, Some(rx), trailers_rx);
+    Ok(response)
+}
+
+/// Minimal percent-decoder for the /detect query payload.
+fn percent_decode(input: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        match input[i] {
+            b'%' if i + 2 < input.len() + 1 && i + 2 < input.len() + 1 => {
+                let hex = |b: u8| -> Option<u8> {
+                    match b {
+                        b'0'..=b'9' => Some(b - b'0'),
+                        b'a'..=b'f' => Some(b - b'a' + 10),
+                        b'A'..=b'F' => Some(b - b'A' + 10),
+                        _ => None,
+                    }
+                };
+                if i + 2 < input.len() {
+                    if let (Some(h), Some(l)) = (hex(input[i + 1]), hex(input[i + 2])) {
+                        out.push(h * 16 + l);
+                        i += 3;
+                        continue;
+                    }
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+async fn run_cfar(
     sar_image: &[f32],
     width: u32,
     height: u32,
@@ -68,7 +197,7 @@ fn run_cfar(
 ) -> (Vec<u32>, bool) {
     #[cfg(feature = "gpu")]
     if !force_cpu {
-        match gpu::run_cfar_gpu(sar_image, width, height, params) {
+        match gpu::run_cfar_gpu(sar_image, width, height, params).await {
             Ok(mask) => return (mask, true),
             Err(_) => {}
         }
@@ -77,7 +206,7 @@ fn run_cfar(
     (mask, false)
 }
 
-fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult, String> {
+async fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult, String> {
     let start = wstd::time::Instant::now();
     let bbox = request.custom_bbox.clone().unwrap_or_else(|| get_region_bbox(&request.region));
     let cfar_params = CfarParams::default();
@@ -152,7 +281,8 @@ fn run_detection_pipeline(request: &DetectionRequest) -> Result<DetectionResult,
                 render_h,
                 &cfar_params,
                 request.force_cpu,
-            );
+            )
+            .await;
             total_cfar_ms += cfar_start_instant.elapsed().as_millis() as f64;
             used_gpu |= gpu;
 
