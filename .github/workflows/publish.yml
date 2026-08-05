@@ -33,7 +33,7 @@ jobs:
       - name: Setup wash CLI
         uses: wasmcloud/setup-wash-action@main
         with:
-          wash-version: "v2.0.5"
+          wash-version: "v2.5.2"
 
       # `wash build` runs the .wash/config.yaml command, which is
       # `cargo build --workspace --target wasm32-wasip2 --release --features gpu`.
