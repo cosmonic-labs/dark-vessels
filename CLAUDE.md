@@ -2,12 +2,15 @@
 
 ## Architecture
 
-Two Wasm components compiled to `wasm32-wasip2`, communicating via `wasmcloud:messaging`:
+**ONE workload, ONE component.** `sar-processor` (compiled to `wasm32-wasip2`) serves the frontend SPA, the GeoJSON API, and GPU CA-CFAR detection, all behind its async `wasi:http/handler@0.3.0` (P3) export:
 
-- **api-gateway** — HTTP server (wstd), serves the frontend SPA and GeoJSON API
-- **sar-processor** — GPU compute worker, runs CA-CFAR ship detection via `wasi:webgpu`, spatial join with AIS data
+- Detection lives behind the **async** P3 HTTP export because `wasi:webgpu@0.3.0-rc.2` declares its acquisition/map functions `async func` — a sync-lifted export cannot await them.
+- The `wasmcloud:messaging` handler remains as a CPU-only compatibility trigger on subject `tasks.sar-processor`.
+- Do NOT reintroduce a separate HTTP gateway component: the wasmCloud runtime dispatches `wasi:http` to only **one component per workload** (the host logs `multiple components carry an export...routing to the first in manifest order` and the second component never receives traffic). An earlier `api-gateway` crate was removed for this reason (see git history).
 
-The WIT worlds are defined in `wit/world.wit`. There are three worlds: `api-gateway`, `sar-processor` (CPU-only), and `sar-processor-gpu` (with `wasi:webgpu` import). The `gpu` Cargo feature switches between them.
+Deployment manifests (all single-workload): `deploy/desktop/workload.yaml` (Cosmonic Desktop, flat `Workload`), `deploy/control/httptrigger.yaml` (Cosmonic Control), `deploy/wasmcloud/workloaddeployment.yaml` (vanilla wasmCloud runtime-operator).
+
+The WIT worlds are defined in `wit/world.wit`. There are two worlds: `sar-processor` (CPU-only) and `sar-processor-gpu` (with `wasi:webgpu` import). The `gpu` Cargo feature switches between them.
 
 ## wasmCloud WebGPU — Critical Configuration
 
@@ -59,8 +62,8 @@ Do NOT add `wit/deps/` to `.gitignore` — the webgpu WIT files must be committe
 | `sar-processor/src/spatial_join.rs` | Haversine distance, AIS/SAR matching (500m threshold) |
 | `sar-processor/src/ocean.rs` | Global land/ocean classifier from Natural Earth 110m coastlines (128 polygons) |
 | `sar-processor/src/types.rs` | All shared types: DetectionRequest, VesselDetection, SarDetection, SizeClass, etc. |
-| `api-gateway/src/lib.rs` | HTTP routing, GeoJSON conversion, type mirrors for deserialization |
-| `api-gateway/ui.html` | Full frontend SPA — MapLibre GL JS map, stats dashboard, draw tool, credential modals |
+| `sar-processor/src/geojson.rs` | DetectionResult → GeoJSON FeatureCollection conversion |
+| `sar-processor/ui.html` | Full frontend SPA — MapLibre GL JS map, stats dashboard, draw tool, credential modals |
 
 ## Frontend
 
@@ -76,13 +79,13 @@ Single HTML file embedded via `include_str!("../ui.html")`. Contains:
 
 ## Data Flow
 
-1. Frontend POSTs to `/api/detect` with region/bbox, SAR size, seed, optional credentials
-2. api-gateway forwards via `wasmcloud:messaging` to sar-processor
+1. Frontend calls `GET /api/detect?req=<urlencoded json>` with region/bbox, SAR size, seed, optional credentials
+2. sar-processor's async P3 `wasi:http/handler` receives the request directly
 3. sar-processor generates synthetic SAR image + AIS records (or would fetch real data with credentials)
 4. CFAR runs on GPU (wasi:webgpu) or CPU (fallback)
 5. Connected component labeling extracts ship detections with dimensions
 6. Spatial join classifies: matched / dark_vessel / ais_only
-7. Results returned as JSON, api-gateway converts to GeoJSON FeatureCollection
+7. sar-processor converts to GeoJSON FeatureCollection and responds (`geojson` module; `/detect` returns the raw DetectionResult for programmatic consumers)
 
 ## Default Region
 

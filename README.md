@@ -8,7 +8,7 @@ Dark Vessels detects ships in synthetic Sentinel-1 SAR (Synthetic Aperture Radar
 
 ## Why This Matters
 
-This project demonstrates that **real signal processing workloads can run inside Wasm components** with GPU acceleration, secure sandboxing, and sub-second cold starts. Everything ships as two tiny `.wasm` files totaling **639 KB**.
+This project demonstrates that **real signal processing workloads can run inside Wasm components** with GPU acceleration, secure sandboxing, and sub-second cold starts. Everything — HTTP server, embedded frontend, GPU compute, and global coastline data — ships as a single `.wasm` file of **414 KB**.
 
 ---
 
@@ -67,9 +67,7 @@ One workload, one component. Detection lives behind the **async**
 `wasi:http/handler@0.3.0` export because `wasi:webgpu@0.3.0-rc.2` declares
 its acquisition/map functions `async func` — a sync-lifted export (like the
 messaging handler) cannot await them, so the messaging trigger remains as a
-CPU-only compatibility surface on subject `tasks.sar-processor`. The
-`api-gateway` crate is retained in-tree but is no longer part of the default
-deployment.
+CPU-only compatibility surface on subject `tasks.sar-processor`.
 
 
 ---
@@ -118,23 +116,21 @@ The SAR size slider in the UI lets you scale from 512 to 4096 pixels per side. T
 
 | Component | Binary Size | Cold Start | Exports | Key Imports |
 |-----------|------------|------------|---------|-------------|
-| `api-gateway.wasm` | **391 KB** | < 10ms | `wasi:http/incoming-handler` | `wasmcloud:messaging/consumer` |
-| `sar-processor.wasm` | **247 KB** | < 10ms | `wasmcloud:messaging/handler` | `wasi:webgpu/webgpu`, `wasmcloud:messaging/consumer` |
-| **Total** | **639 KB** | | | |
+| `sar-processor.wasm` | **414 KB** | < 10ms | `wasi:http/handler@0.3.0` (async), `wasmcloud:messaging/handler` | `wasi:webgpu/webgpu`, `wasmcloud:messaging/consumer` |
 
-**639 KB** for a complete maritime surveillance system with GPU compute, HTTP server, embedded frontend, and global coastline data.
+**414 KB** for a complete maritime surveillance system with GPU compute, HTTP server, embedded frontend, and global coastline data.
 
 ### Secure Sandbox
 
 Each Wasm component runs in a **sandboxed execution environment** enforced by the WebAssembly runtime:
 
 - **No filesystem access** — components cannot read or write to the host filesystem
-- **No network access** except through declared WIT imports — `api-gateway` can only serve HTTP, `sar-processor` can only use WebGPU and messaging
+- **No network access** except through declared WIT imports — `sar-processor` can only answer HTTP, use WebGPU, and exchange messages; outbound HTTP is further scoped by the deployment's `allowedHosts` allowlist
 - **No ambient authority** — capabilities are explicitly linked at deployment time
 - **Memory isolation** — each component has its own linear memory, no shared state
 - **Deny by default** — if an import isn't declared in the WIT world and linked by the host, it doesn't exist
 
-The host provides only the interfaces each component declares it needs. A compromised `sar-processor` cannot make HTTP requests, access the filesystem, or even see the other component's memory. This is not a container boundary — it's a **language-level capability sandbox** enforced by the Wasm type system.
+The host provides only the interfaces the component declares it needs. A compromised `sar-processor` cannot open sockets, access the filesystem, or reach any host not on its `allowedHosts` list. This is not a container boundary — it's a **language-level capability sandbox** enforced by the Wasm type system.
 
 ---
 
@@ -142,44 +138,7 @@ The host provides only the interfaces each component declares it needs. A compro
 
 WebAssembly starts each sandbox with full adherance to the principle of least authority; with zero capabilities. Each capability - network access, file system, system call, etc. but be explicitly granted.  This provides an additional layer of protection against remote code execution, lateral movement, data exfiltraiton, and other security risks:
 
-With the two WebAssembly Components we can see how they the POLA is respected at both the component level and the compisition level - the APIs are linked and decleare both their imports and their exports.
-
-#### api_gateway.wasm
-
-`api_gateway.wasm` Capabilities
-
-Inspecting `wasm-tools component wit ./api_gateway.wasm`
-
-```
-package root:component;
-
-world root {
-  import wasmcloud:messaging/types@0.2.0;
-  import wasmcloud:messaging/consumer@0.2.0;
-  import wasi:io/poll@0.2.9;
-  import wasi:clocks/monotonic-clock@0.2.9;
-  import wasi:io/error@0.2.9;
-  import wasi:io/streams@0.2.9;
-  import wasi:cli/stdout@0.2.9;
-  import wasi:cli/stderr@0.2.9;
-  import wasi:cli/stdin@0.2.9;
-  import wasi:http/types@0.2.9;
-  import wasi:cli/environment@0.2.9;
-  import wasi:cli/exit@0.2.9;
-  import wasi:cli/terminal-input@0.2.9;
-  import wasi:cli/terminal-output@0.2.9;
-  import wasi:cli/terminal-stdin@0.2.9;
-  import wasi:cli/terminal-stdout@0.2.9;
-  import wasi:cli/terminal-stderr@0.2.9;
-  import wasi:random/insecure-seed@0.2.9;
-
-  export wasi:http/incoming-handler@0.2.9;
-}
-```
-
-#### sar_processor.wasm
-
-`sar_processor.wasm` Capabilities
+The component's WIT world is its complete capability surface — every import and export is declared, linkable only by the host, and visible to inspection:
 
 Inspecting `wasm-tools component wit ./sar_processor.wasm`
 
@@ -187,10 +146,11 @@ Inspecting `wasm-tools component wit ./sar_processor.wasm`
 package root:component;
 
 world root {
-  import wasi:io/poll@0.2.9;
   import wasi:webgpu/webgpu@0.3.0-rc.2;
   import wasmcloud:messaging/types@0.2.0;
   import wasmcloud:messaging/consumer@0.2.0;
+  import wasi:http/types@0.3.0;
+  import wasi:io/poll@0.2.9;
   import wasi:clocks/monotonic-clock@0.2.9;
   import wasi:io/error@0.2.9;
   import wasi:io/streams@0.2.9;
@@ -206,8 +166,11 @@ world root {
   import wasi:cli/terminal-stderr@0.2.9;
 
   export wasmcloud:messaging/handler@0.2.0;
+  export wasi:http/handler@0.3.0;
 }
 ```
+
+Note what is *absent*: no filesystem, no sockets, no ambient network. The only compute and I/O this component can perform is what the world above declares and the host chooses to link.
 
 ---
 
@@ -240,18 +203,35 @@ Remove `--features gpu` from the build command and `wasi_webgpu: true` from dev 
 
 ---
 
+## Deploying on Cosmonic Desktop
+
+The easiest way to run Dark Vessels: **one workload, ready to apply** at
+[`deploy/desktop/workload.yaml`](./deploy/desktop/workload.yaml). Apply it
+with the Cosmonic Desktop UI or the `cosmonic` MCP server
+(`cosmonic_apply_workload`), then open
+<http://dark-vessels.localhost.cosmonic.sh:8200/>.
+
+> The wasmCloud runtime dispatches `wasi:http` to only **one component per
+> workload**, and the GPU path must enter through `sar-processor`'s async P3
+> HTTP export — so the single self-contained component is the correct
+> single-workload shape. Every deploy target below uses the same ONE
+> workload / ONE component layout.
+
+---
+
 ## Deploying to Kubernetes
 
-Dark Vessels has manifests for two targets:
+Dark Vessels has manifests for two Kubernetes targets:
 
 - **Cosmonic Control** — `deploy/control/httptrigger.yaml` (recommended; demoed below)
 - **Vanilla wasmCloud** — `deploy/wasmcloud/workloaddeployment.yaml` (the `runtime-operator` chart path; documented further down)
 
 ### Cosmonic Control (kind)
 
-`deploy/control/httptrigger.yaml` declares both components: an `HTTPTrigger`
-fronting `api-gateway` and a `WorkloadDeployment` for `sar-processor`
-subscribed to `tasks.sar-processor` over NATS.
+`deploy/control/httptrigger.yaml` declares one `HTTPTrigger` running the
+`sar-processor` component, which serves the SPA and the detection API and
+keeps the messaging surface as a CPU-only compatibility trigger on
+`tasks.sar-processor`.
 
 The `sar-processor` component imports `wasi:webgpu`, so the hostgroup needs
 `--set gpu=true` — without it the workload sticks at `WORKLOAD_STATE_ERROR`
@@ -313,13 +293,12 @@ helm install wasmcloud oci://ghcr.io/wasmcloud/charts/runtime-operator \
 kubectl apply -f deploy/wasmcloud/workloaddeployment.yaml
 ```
 
-The `runtime-gateway` (installed by the chart) routes by `Host` header. Once both `WorkloadDeployment`s reach `Ready=True`:
+The `runtime-gateway` (installed by the chart) routes by `Host` header. Once the `WorkloadDeployment` reaches `Ready=True`:
 
 ```bash
 curl -H 'Host: dark-vessels.localhost.direct' http://<gateway-host>/
 curl -H 'Host: dark-vessels.localhost.direct' \
-  -X POST -H 'Content-Type: application/json' -d '{}' \
-  http://<gateway-host>/api/detect
+  'http://<gateway-host>/api/detect?req=%7B%7D'
 ```
 
 ### Alternative: CPU-only deployment
@@ -360,11 +339,10 @@ Without credentials, the system uses synthetic data with realistic vessel distri
 
 ```
 dark-vessels/
-├── api-gateway/          HTTP server + embedded frontend
-│   ├── src/lib.rs        Route dispatch, GeoJSON conversion
-│   └── ui.html           Full SPA (MapLibre, stats, draw tool, modals)
-├── sar-processor/        GPU compute worker
-│   ├── src/lib.rs        Pipeline orchestration, detection extraction
+├── sar-processor/        The component: HTTP server + frontend + GPU compute
+│   ├── ui.html           Full SPA (MapLibre, stats, draw tool, modals)
+│   ├── src/lib.rs        HTTP routing, pipeline orchestration, detection extraction
+│   ├── src/geojson.rs    DetectionResult → GeoJSON conversion
 │   ├── src/gpu.rs        wasi:webgpu device init, buffer mgmt, dispatch
 │   ├── src/cfar.wgsl     WGSL compute shader (CA-CFAR algorithm)
 │   ├── src/cfar_cpu.rs   CPU fallback (same algorithm)
@@ -372,8 +350,9 @@ dark-vessels/
 │   ├── src/spatial_join.rs  Haversine matching (500m threshold)
 │   ├── src/ocean.rs      Global land/ocean mask (Natural Earth 110m)
 │   └── src/types.rs      Shared types and region definitions
+├── deploy/               Single-workload manifests (desktop, control, wasmcloud)
 ├── wit/                  WIT interface definitions
-│   ├── world.wit         Component worlds (api-gateway, sar-processor, sar-processor-gpu)
+│   ├── world.wit         Component worlds (sar-processor, sar-processor-gpu)
 │   └── deps/             Vendored WIT packages (webgpu, messaging, io)
 ├── .wash/config.yaml     Build + dev configuration
 └── CLAUDE.md             AI assistant context
@@ -393,4 +372,4 @@ dark-vessels/
 
 ---
 
-*Built with wasmCloud 2.0 to demonstrate that WebAssembly components can handle complex, GPU-accelerated geospatial workloads — securely, portably, and in under 640 KB.*
+*Built with wasmCloud 2.0 to demonstrate that WebAssembly components can handle complex, GPU-accelerated geospatial workloads — securely, portably, and in under 420 KB.*

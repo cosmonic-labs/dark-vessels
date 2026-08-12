@@ -71,7 +71,7 @@ impl exports::wasmcloud::messaging::handler::Guest for Component {
     }
 }
 
-static UI_HTML: &str = include_str!("../../api-gateway/ui.html");
+static UI_HTML: &str = include_str!("../ui.html");
 static LOGO_PNG: &[u8] = include_bytes!("../../icons/Cosmonic.Logo-Hrztl_Color.png");
 
 impl exports::wasi::http::handler::Guest for Component {

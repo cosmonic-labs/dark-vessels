@@ -1,10 +1,5 @@
 package darkvessel:dark-vessels;
 
-world api-gateway {
-  // The gateway talks to sar-processor over intra-workload HTTP (wstd's
-  // wasip2 client); it needs no non-WASI imports of its own.
-}
-
 world sar-processor {
   import wasmcloud:messaging/consumer@0.2.0;
   export wasmcloud:messaging/handler@0.2.0;

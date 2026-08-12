@@ -1,5 +1,4 @@
-//! GeoJSON conversion for the HTTP API (moved from the api-gateway when the
-//! demo collapsed into a single component).
+//! GeoJSON conversion for the HTTP API.
 
 use crate::types::{DetectionResult, ProcessingStats, VesselStatus};
 use serde::Serialize;

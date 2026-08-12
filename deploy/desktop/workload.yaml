@@ -1,0 +1,54 @@
+# Dark Vessels on Cosmonic Desktop — ONE Workload, ONE component.
+#
+# The sar-processor image serves the SPA and the detection API behind the
+# async `wasi:http/handler@0.3.0` (P3) export and runs CA-CFAR on the GPU
+# via `wasi:webgpu@0.3.0-rc.2`. The messaging surface remains as a CPU-only
+# compatibility trigger on subject "tasks.sar-processor".
+#
+# Note: the wasmCloud runtime dispatches wasi:http to only ONE component per
+# workload, so a separate HTTP gateway component in the same workload would
+# never receive traffic — the single self-contained component is the correct
+# single-workload shape.
+#
+# Apply with the cosmonic MCP tool (cosmonic_apply_workload) or the Desktop
+# UI, then open: http://dark-vessels.localhost.cosmonic.sh:8200/
+apiVersion: runtime.wasmcloud.dev/v1alpha1
+kind: Workload
+metadata:
+  name: dark-vessels
+  namespace: default
+  annotations:
+    # Local dev only: the ghcr images carry no cosign signature.
+    desktop.cosmonic.com/unsafe-allow-unsigned: "true"
+spec:
+  components:
+    - name: sar-processor
+      image: ghcr.io/cosmonic-labs/dark-vessels/sar-processor:0.2.0
+      poolSize: 1
+      localResources:
+        allowedHosts:
+          - dataspace.copernicus.eu   # CDSE OAuth + Sentinel-1 SAR (optional)
+          - www.aishub.net            # Live AIS vessel feed (optional)
+  hostInterfaces:
+    # The async P3 HTTP trigger; config.host sets the ingress hostname.
+    - namespace: wasi
+      package: http
+      interfaces:
+        - handler
+      config:
+        host: dark-vessels.localhost.cosmonic.sh
+    - namespace: wasi
+      package: webgpu
+      version: 0.3.0-rc.2
+      interfaces:
+        - webgpu
+    # CPU-only compatibility trigger.
+    - namespace: wasmcloud
+      package: messaging
+      version: "0.2.0"
+      interfaces:
+        - handler
+        - consumer
+        - types
+      config:
+        subscriptions: tasks.sar-processor

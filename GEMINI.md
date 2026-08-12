@@ -8,13 +8,11 @@ Dark Vessels is a geospatial application that detects ships in SAR (Synthetic Ap
 
 ### Architecture
 
-- **`api-gateway`**: A Wasm component serving as the entry point.
-    - **Exports**: `wasi:http/incoming-handler` (via `wstd::http_server`).
-    - **Imports**: `wasmcloud:messaging/consumer` to communicate with the processor.
-    - **Functions**: Serves a MapLibre GL JS-based frontend and handles API requests by proxying to the `sar-processor`.
-- **`sar-processor`**: The core compute engine.
-    - **Exports**: `wasmcloud:messaging/handler`.
-    - **Imports**: `wasi:webgpu/webgpu` (optional), `wasmcloud:messaging/consumer`.
+ONE workload, ONE component:
+
+- **`sar-processor`**: Serves the MapLibre GL JS frontend, the GeoJSON API, and runs detection.
+    - **Exports**: `wasi:http/handler@0.3.0` (async, P3 — required so the component can await `wasi:webgpu`'s async functions) and `wasmcloud:messaging/handler` (CPU-only compatibility trigger).
+    - **Imports**: `wasi:webgpu/webgpu` (optional, `gpu` feature), `wasmcloud:messaging/consumer`.
     - **Pipeline**:
         1. **Synthetic Generation**: Generates SAR intensity images and AIS records.
         2. **GPU/CPU Compute**: Runs CA-CFAR (Cell-Averaging Constant False Alarm Rate) algorithm.
@@ -68,8 +66,10 @@ Dark Vessels is a geospatial application that detects ships in SAR (Synthetic Ap
 
 ### Code Structure
 
-- **`api-gateway/`**: Contains the HTTP server and the embedded SPA (`ui.html`).
 - **`sar-processor/`**:
+    - `ui.html`: The embedded single-file SPA.
+    - `src/lib.rs`: HTTP routing and pipeline orchestration.
+    - `src/geojson.rs`: DetectionResult → GeoJSON conversion.
     - `src/gpu.rs`: WebGPU device initialization and dispatch.
     - `src/cfar.wgsl`: The GPU compute shader implementation.
     - `src/cfar_cpu.rs`: The fallback CPU implementation.
@@ -84,14 +84,13 @@ Dark Vessels is a geospatial application that detects ships in SAR (Synthetic Ap
 
 ### Messaging
 
-- Communication between components is asynchronous via NATS (abstracted by `wasmcloud:messaging`).
-- `api-gateway` uses `consumer::request` for a synchronous-like request/response pattern over messaging.
+- The `wasmcloud:messaging` handler on subject `tasks.sar-processor` is a CPU-only compatibility trigger (a sync-lifted export cannot await the async WebGPU imports); HTTP is the primary, GPU-capable entry point.
 
 ---
 
 ## Data Pipeline Details
 
-1. **Detection Request**: Triggered via `POST /api/detect` with a bounding box and parameters.
+1. **Detection Request**: Triggered via `GET /api/detect?req=<urlencoded json>` with a bounding box and parameters.
 2. **SAR Generation**: Creates a `f32` array representing pixel intensity.
 3. **CFAR Processing**:
     - **GPU**: Uses WGSL shader with 16x16 workgroups.
