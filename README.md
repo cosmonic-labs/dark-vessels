@@ -228,10 +228,12 @@ Dark Vessels has manifests for two Kubernetes targets:
 
 ### Cosmonic Control (kind)
 
-`deploy/control/httptrigger.yaml` declares one `HTTPTrigger` running the
+`deploy/control/httptrigger.yaml` declares one `WorkloadDeployment` running the
 `sar-processor` component, which serves the SPA and the detection API and
 keeps the messaging surface as a CPU-only compatibility trigger on
-`tasks.sar-processor`.
+`tasks.sar-processor`, plus a `control.cosmonic.io/v1alpha2` `HTTPTrigger`
+that routes `darkvessels.localhost.cosmonic.sh` to it. The manifest needs
+Cosmonic Control v0.13.0 or later.
 
 The `sar-processor` component imports `wasi:webgpu`, so the hostgroup needs
 `--set gpu=true` — without it the workload sticks at `WORKLOAD_STATE_ERROR`
@@ -256,14 +258,14 @@ kind create cluster --config ./kind-config.yaml
 
 # 2. Cosmonic Control + hostgroup (gpu=true is required for sar-processor)
 helm upgrade --install cosmonic-control oci://ghcr.io/cosmonic/cosmonic-control \
-  --version 0.4.1 \
+  --version 0.13.0 \
   --namespace cosmonic-system --create-namespace \
   --set 'ingress.hosts[0].host=darkvessels.localhost.cosmonic.sh'
 
 helm upgrade --install hostgroup oci://ghcr.io/cosmonic/cosmonic-control-hostgroup \
-  --version 0.4.1 --namespace cosmonic-system --set gpu=true
+  --version 0.13.0 --namespace cosmonic-system --set gpu=true
 
-# 3. Apply the manifest
+# 3. Apply the manifests
 kubectl apply -f https://raw.githubusercontent.com/cosmonic-labs/dark-vessels/main/deploy/control/httptrigger.yaml
 ```
 

@@ -1,10 +1,16 @@
-# Cosmonic Control HTTPTrigger for dark-vessels.
+# Cosmonic Control manifests for dark-vessels (Control v0.13.0 or later).
 #
-# ONE trigger, ONE component: the sar-processor image serves the SPA and the
-# detection API behind the async `wasi:http/handler@0.3.0` export and runs
-# CA-CFAR on the GPU via `wasi:webgpu@0.3.0-rc.2` (requires wasmCloud >=
-# v2.6.1 and a webgpu-enabled host group). The messaging surface remains as
-# a CPU-only compatibility trigger.
+# ONE WorkloadDeployment, ONE component: the sar-processor image serves the
+# SPA and the detection API behind the async `wasi:http/handler@0.3.0` export
+# and runs CA-CFAR on the GPU via `wasi:webgpu@0.3.0-rc.2` (requires wasmCloud
+# >= v2.6.1 and a webgpu-enabled host group). The messaging surface remains as
+# a CPU-only compatibility trigger. A routing-only HTTPTrigger
+# (control.cosmonic.io/v1alpha2) sends darkvessels.localhost.cosmonic.sh to it.
+#
+# The WorkloadDeployment declares the inbound wasi:http interface itself (the
+# v1alpha1 operator used to add it). sar-processor is a WASI P3 component, so
+# the entry names the unified `handler` export, as in
+# deploy/wasmcloud/workloaddeployment.yaml.
 #
 # The SPA loads resources from several external origins; outbound access is
 # scoped via localResources.allowedHosts:
@@ -12,22 +18,22 @@
 #   - www.aishub.net           Live AIS vessel feed (optional)
 # (unpkg.com / openstreetmap tiles are fetched by the BROWSER, not the
 # component, and need no allowedHosts entries.)
-apiVersion: control.cosmonic.io/v1alpha1
-kind: HTTPTrigger
+apiVersion: runtime.wasmcloud.dev/v1alpha1
+kind: WorkloadDeployment
 metadata:
   name: dark-vessels
   namespace: cosmonic-system
 spec:
-  ingress:
-    host: darkvessels.localhost.cosmonic.sh
-    paths:
-      - pathType: Prefix
-        path: /
-  timeout: 300s
   replicas: 1
   template:
     spec:
       hostInterfaces:
+        - namespace: wasi
+          package: http
+          interfaces:
+            - handler
+          config:
+            host: darkvessels.localhost.cosmonic.sh
         - namespace: wasi
           package: logging
           version: 0.1.0-draft
@@ -55,3 +61,21 @@ spec:
             allowedHosts:
               - "https://dataspace.copernicus.eu"
               - "https://www.aishub.net"
+---
+apiVersion: control.cosmonic.io/v1alpha2
+kind: HTTPTrigger
+metadata:
+  name: dark-vessels
+  namespace: cosmonic-system
+spec:
+  hostnames:
+    - darkvessels.localhost.cosmonic.sh
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      timeouts:
+        request: 300s
+      backendRefs:
+        - name: dark-vessels
